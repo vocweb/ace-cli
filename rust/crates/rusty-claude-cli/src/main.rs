@@ -1441,13 +1441,13 @@ fn run_doctor(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::
 ///
 /// Tool descriptors come from [`tools::mvp_tool_specs`] and calls are
 /// dispatched through [`tools::execute_tool`], so this server exposes exactly
-/// Read `.ace/worker-state.json` from the current working directory and print it.
+/// Read `.claw/worker-state.json` from the current working directory and print it.
 /// This is the file-based worker observability surface: `push_event()` in `worker_boot.rs`
-/// atomically writes state transitions here so external observers (acehip, orchestrators)
+/// atomically writes state transitions here so external observers (clawhip, orchestrators)
 /// can poll current `WorkerStatus` without needing an HTTP route on the opencode binary.
 fn run_worker_state(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::Error>> {
     let cwd = env::current_dir()?;
-    let state_path = cwd.join(".ace").join("worker-state.json");
+    let state_path = cwd.join(".claw").join("worker-state.json");
     if !state_path.exists() {
         // Emit a structured error, then return Err so the process exits 1.
         // Callers (scripts, CI) need a non-zero exit to detect "no state" without
@@ -4601,8 +4601,8 @@ fn resolve_managed_session_path(session_id: &str) -> Result<PathBuf, Box<dyn std
         }
     }
     // Backward compatibility: pre-isolation sessions were stored at
-    // `.ace/sessions/<id>.{jsonl,json}` without the per-workspace hash
-    // subdirectory. Walk up from `directory` to the `.ace/sessions/` root
+    // `.claw/sessions/<id>.{jsonl,json}` without the per-workspace hash
+    // subdirectory. Walk up from `directory` to the `.claw/sessions/` root
     // and try the flat layout as a fallback so users do not lose access
     // to their pre-upgrade managed sessions.
     if let Some(legacy_root) = directory
@@ -4693,7 +4693,7 @@ fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::er
     collect_sessions_from_dir(&primary_dir, &mut sessions)?;
 
     // Backward compatibility: include sessions stored in the pre-isolation
-    // flat `.ace/sessions/` root so users do not lose access to existing
+    // flat `.claw/sessions/` root so users do not lose access to existing
     // managed sessions after the workspace-hashed subdirectory rollout.
     if let Some(legacy_root) = primary_dir
         .parent()
@@ -8453,24 +8453,24 @@ mod tests {
         let root = temp_dir();
         let cwd = root.join("project");
         let config_home = root.join("config-home");
-        std::fs::create_dir_all(cwd.join(".ace")).expect("project config dir should exist");
+        std::fs::create_dir_all(cwd.join(".claw")).expect("project config dir should exist");
         std::fs::create_dir_all(&config_home).expect("config home should exist");
         std::fs::write(
-            cwd.join(".ace").join("settings.json"),
+            cwd.join(".claw").join("settings.json"),
             r#"{"permissionMode":"acceptEdits"}"#,
         )
         .expect("project config should write");
 
-        let original_config_home = std::env::var("ACE_CONFIG_HOME").ok();
+        let original_config_home = std::env::var("CLAW_CONFIG_HOME").ok();
         let original_permission_mode = std::env::var("RUSTY_CLAUDE_PERMISSION_MODE").ok();
-        std::env::set_var("ACE_CONFIG_HOME", &config_home);
+        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
         std::env::remove_var("RUSTY_CLAUDE_PERMISSION_MODE");
 
         let resolved = with_current_dir(&cwd, super::default_permission_mode);
 
         match original_config_home {
-            Some(value) => std::env::set_var("ACE_CONFIG_HOME", value),
-            None => std::env::remove_var("ACE_CONFIG_HOME"),
+            Some(value) => std::env::set_var("CLAW_CONFIG_HOME", value),
+            None => std::env::remove_var("CLAW_CONFIG_HOME"),
         }
         match original_permission_mode {
             Some(value) => std::env::set_var("RUSTY_CLAUDE_PERMISSION_MODE", value),
@@ -8487,24 +8487,24 @@ mod tests {
         let root = temp_dir();
         let cwd = root.join("project");
         let config_home = root.join("config-home");
-        std::fs::create_dir_all(cwd.join(".ace")).expect("project config dir should exist");
+        std::fs::create_dir_all(cwd.join(".claw")).expect("project config dir should exist");
         std::fs::create_dir_all(&config_home).expect("config home should exist");
         std::fs::write(
-            cwd.join(".ace").join("settings.json"),
+            cwd.join(".claw").join("settings.json"),
             r#"{"permissionMode":"acceptEdits"}"#,
         )
         .expect("project config should write");
 
-        let original_config_home = std::env::var("ACE_CONFIG_HOME").ok();
+        let original_config_home = std::env::var("CLAW_CONFIG_HOME").ok();
         let original_permission_mode = std::env::var("RUSTY_CLAUDE_PERMISSION_MODE").ok();
-        std::env::set_var("ACE_CONFIG_HOME", &config_home);
+        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
         std::env::set_var("RUSTY_CLAUDE_PERMISSION_MODE", "read-only");
 
         let resolved = with_current_dir(&cwd, super::default_permission_mode);
 
         match original_config_home {
-            Some(value) => std::env::set_var("ACE_CONFIG_HOME", value),
-            None => std::env::remove_var("ACE_CONFIG_HOME"),
+            Some(value) => std::env::set_var("CLAW_CONFIG_HOME", value),
+            None => std::env::remove_var("CLAW_CONFIG_HOME"),
         }
         match original_permission_mode {
             Some(value) => std::env::set_var("RUSTY_CLAUDE_PERMISSION_MODE", value),
@@ -8537,10 +8537,10 @@ mod tests {
         std::fs::create_dir_all(&workspace).expect("workspace should exist");
         std::fs::create_dir_all(&config_home).expect("config home should exist");
 
-        let original_config_home = std::env::var("ACE_CONFIG_HOME").ok();
+        let original_config_home = std::env::var("CLAW_CONFIG_HOME").ok();
         let original_api_key = std::env::var("ANTHROPIC_API_KEY").ok();
         let original_auth_token = std::env::var("ANTHROPIC_AUTH_TOKEN").ok();
-        std::env::set_var("ACE_CONFIG_HOME", &config_home);
+        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
         std::env::remove_var("ANTHROPIC_API_KEY");
         std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
 
@@ -8565,8 +8565,8 @@ mod tests {
             .expect("stored credentials should exist");
 
         match original_config_home {
-            Some(value) => std::env::set_var("ACE_CONFIG_HOME", value),
-            None => std::env::remove_var("ACE_CONFIG_HOME"),
+            Some(value) => std::env::set_var("CLAW_CONFIG_HOME", value),
+            None => std::env::remove_var("CLAW_CONFIG_HOME"),
         }
         match original_api_key {
             Some(value) => std::env::set_var("ANTHROPIC_API_KEY", value),
@@ -8788,16 +8788,16 @@ mod tests {
         let root = temp_dir();
         let cwd = root.join("project");
         let config_home = root.join("config-home");
-        std::fs::create_dir_all(cwd.join(".ace")).expect("project config dir should exist");
+        std::fs::create_dir_all(cwd.join(".claw")).expect("project config dir should exist");
         std::fs::create_dir_all(&config_home).expect("config home should exist");
         std::fs::write(
-            cwd.join(".ace").join("settings.json"),
+            cwd.join(".claw").join("settings.json"),
             r#"{"aliases":{"fast":"claude-haiku-4-5-20251213","smart":"opus","cheap":"grok-3-mini"}}"#,
         )
         .expect("project config should write");
 
-        let original_config_home = std::env::var("ACE_CONFIG_HOME").ok();
-        std::env::set_var("ACE_CONFIG_HOME", &config_home);
+        let original_config_home = std::env::var("CLAW_CONFIG_HOME").ok();
+        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
 
         // when
         let direct = with_current_dir(&cwd, || resolve_model_alias_with_config("fast"));
@@ -8807,8 +8807,8 @@ mod tests {
         let builtin = with_current_dir(&cwd, || resolve_model_alias_with_config("haiku"));
 
         match original_config_home {
-            Some(value) => std::env::set_var("ACE_CONFIG_HOME", value),
-            None => std::env::remove_var("ACE_CONFIG_HOME"),
+            Some(value) => std::env::set_var("CLAW_CONFIG_HOME", value),
+            None => std::env::remove_var("CLAW_CONFIG_HOME"),
         }
         std::fs::remove_dir_all(root).expect("temp config root should clean up");
 
@@ -9819,7 +9819,7 @@ mod tests {
         fs::create_dir_all(&root).expect("root dir");
         let config_home = root.join("config");
         fs::create_dir_all(&config_home).expect("config home dir");
-        std::env::set_var("ACE_CONFIG_HOME", &config_home);
+        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
         std::env::remove_var("ANTHROPIC_MODEL");
         std::env::set_var("ANTHROPIC_MODEL", "sonnet");
 
@@ -9828,7 +9828,7 @@ mod tests {
         assert_eq!(resolved, "claude-sonnet-4-6");
 
         std::env::remove_var("ANTHROPIC_MODEL");
-        std::env::remove_var("ACE_CONFIG_HOME");
+        std::env::remove_var("CLAW_CONFIG_HOME");
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 
@@ -9839,14 +9839,14 @@ mod tests {
         fs::create_dir_all(&root).expect("root dir");
         let config_home = root.join("config");
         fs::create_dir_all(&config_home).expect("config home dir");
-        std::env::set_var("ACE_CONFIG_HOME", &config_home);
+        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
         std::env::remove_var("ANTHROPIC_MODEL");
 
         let resolved = with_current_dir(&root, || resolve_repl_model(DEFAULT_MODEL.to_string()));
 
         assert_eq!(resolved, DEFAULT_MODEL);
 
-        std::env::remove_var("ACE_CONFIG_HOME");
+        std::env::remove_var("CLAW_CONFIG_HOME");
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 
@@ -10348,7 +10348,7 @@ UU conflicted.rs",
         let handle = create_managed_session_handle("session-alpha").expect("jsonl handle");
         assert!(handle.path.ends_with("session-alpha.jsonl"));
 
-        let legacy_path = workspace.join(".ace/sessions/legacy.json");
+        let legacy_path = workspace.join(".claw/sessions/legacy.json");
         std::fs::create_dir_all(
             legacy_path
                 .parent()
