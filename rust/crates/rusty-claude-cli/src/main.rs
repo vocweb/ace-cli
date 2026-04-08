@@ -3847,6 +3847,10 @@ impl LiveCli {
                 self.print_prompt_history(count.as_deref());
                 false
             }
+            SlashCommand::Review { scope } => {
+                self.run_review(scope.as_deref())?;
+                false
+            }
             SlashCommand::Login
             | SlashCommand::Logout
             | SlashCommand::Vim
@@ -3869,7 +3873,6 @@ impl LiveCli {
             | SlashCommand::Keybindings
             | SlashCommand::PrivacySettings
             | SlashCommand::Plan { .. }
-            | SlashCommand::Review { .. }
             | SlashCommand::Tasks { .. }
             | SlashCommand::Theme { .. }
             | SlashCommand::Voice { .. }
@@ -4528,6 +4531,35 @@ impl LiveCli {
             "{}",
             format_commit_preflight_report(branch.as_deref(), summary)
         );
+        Ok(())
+    }
+
+    fn run_review(&mut self, _scope: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let cwd = env::current_dir()?;
+        let staged = run_git_diff_command_in(&cwd, &["diff", "--cached"])?;
+        let unstaged = run_git_diff_command_in(&cwd, &["diff"])?;
+
+        if staged.trim().is_empty() && unstaged.trim().is_empty() {
+            eprintln!("No changes to review.");
+            return Ok(());
+        }
+
+        let mut diff_sections = Vec::new();
+        if !staged.trim().is_empty() {
+            diff_sections.push(format!("Staged changes:\n{}", staged.trim_end()));
+        }
+        if !unstaged.trim().is_empty() {
+            diff_sections.push(format!("Unstaged changes:\n{}", unstaged.trim_end()));
+        }
+        let diff_content = diff_sections.join("\n\n");
+        let diff_content = truncate_for_prompt(&diff_content, 32_000);
+
+        let prompt = format!(
+            "Review the following code changes for bugs, security issues, \
+             code quality, and best practices:\n\n```diff\n{diff_content}\n```"
+        );
+
+        self.run_turn(&prompt)?;
         Ok(())
     }
 
