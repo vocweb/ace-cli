@@ -1136,6 +1136,16 @@ pub enum SlashCommand {
     SecurityReview,
     Keybindings,
     PrivacySettings,
+    Team {
+        args: Option<String>,
+    },
+    Cron {
+        args: Option<String>,
+    },
+    Telemetry {
+        action: Option<String>,
+    },
+    Providers,
     Plan {
         mode: Option<String>,
     },
@@ -1407,6 +1417,13 @@ pub fn validate_slash_command_input(
         "privacy-settings" => {
             validate_no_args(command, &args)?;
             SlashCommand::PrivacySettings
+        }
+        "team" => SlashCommand::Team { args: remainder },
+        "cron" => SlashCommand::Cron { args: remainder },
+        "telemetry" => SlashCommand::Telemetry { action: remainder },
+        "providers" => {
+            validate_no_args(command, &args)?;
+            SlashCommand::Providers
         }
         "plan" => SlashCommand::Plan { mode: remainder },
         "review" => SlashCommand::Review { scope: remainder },
@@ -4008,6 +4025,10 @@ pub fn handle_slash_command(
         | SlashCommand::OutputStyle { .. }
         | SlashCommand::AddDir { .. }
         | SlashCommand::History { .. }
+        | SlashCommand::Team { .. }
+        | SlashCommand::Cron { .. }
+        | SlashCommand::Telemetry { .. }
+        | SlashCommand::Providers
         | SlashCommand::Unknown(_) => None,
     }
 }
