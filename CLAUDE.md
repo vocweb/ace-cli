@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project
+
+ACE CLI — an AI coding agent harness built in Rust.
+
 ## Detected stack
 - Languages: Rust.
 - Frameworks: none detected from the supported starter markers.

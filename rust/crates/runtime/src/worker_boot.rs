@@ -573,8 +573,8 @@ fn push_event(
 }
 
 /// Write current worker state to `.claw/worker-state.json` under the worker's cwd.
-/// This is the file-based observability surface: external observers (clawhip, orchestrators)
-/// poll this file instead of requiring an HTTP route on the opencode binary.
+/// This is the file-based observability surface: external observers (orchestrators)
+/// poll this file instead of requiring an HTTP route on the ace binary.
 fn emit_state_file(worker: &Worker) {
     let state_dir = std::path::Path::new(&worker.cwd).join(".claw");
     if let Err(_) = std::fs::create_dir_all(&state_dir) {
@@ -592,8 +592,8 @@ fn emit_state_file(worker: &Worker) {
         prompt_in_flight: bool,
         last_event: Option<&'a WorkerEvent>,
         updated_at: u64,
-        /// Seconds since last state transition. Clawhip uses this to detect
-        /// stalled workers without computing epoch deltas.
+        /// Seconds since last state transition. External observers use this to
+        /// detect stalled workers without computing epoch deltas.
         seconds_since_update: u64,
     }
 

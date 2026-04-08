@@ -3485,7 +3485,7 @@ fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String> {
             "SendUserMessage",
             "PowerShell",
         ],
-        "claw-guide" => vec![
+        "ace-guide" => vec![
             "read_file",
             "glob_search",
             "grep_search",
@@ -4286,7 +4286,7 @@ fn normalize_subagent_type(subagent_type: Option<&str>) -> String {
         "verification" | "verificationagent" | "verify" | "verifier" => {
             String::from("Verification")
         }
-        "clawguide" | "clawguideagent" | "guide" => String::from("claw-guide"),
+        "clawguide" | "clawguideagent" | "aceguide" | "aceguideagent" | "guide" => String::from("ace-guide"),
         "statusline" | "statuslinesetup" => String::from("statusline-setup"),
         _ => trimmed.to_string(),
     }
@@ -5834,7 +5834,7 @@ mod tests {
             "worker should stall at trust_required when trust prompt seen without allowlist"
         );
         assert_eq!(stalled_output["trust_gate_cleared"], false);
-        // 3. Clawhip calls WorkerResolveTrust to unblock
+        // 3. External orchestrator calls WorkerResolveTrust to unblock
         let resolved = execute_tool("WorkerResolveTrust", &json!({"worker_id": worker_id}))
             .expect("WorkerResolveTrust should succeed");
         let resolved_output: serde_json::Value = serde_json::from_str(&resolved).expect("json");
@@ -5862,7 +5862,7 @@ mod tests {
 
     #[test]
     fn stall_detect_and_restart_recovery_end_to_end() {
-        // Worker stalls at trust_required, clawhip restarts instead of resolving
+        // Worker stalls at trust_required, orchestrator restarts instead of resolving
         let created = execute_tool(
             "WorkerCreate",
             &json!({"cwd": "/no/trusted/root/restart-test"}),

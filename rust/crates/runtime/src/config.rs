@@ -175,7 +175,7 @@ pub struct McpOAuthConfig {
     pub xaa: Option<bool>,
 }
 
-/// OAuth client configuration used by the main Claw runtime.
+/// OAuth client configuration used by the main ACE runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OAuthConfig {
     pub client_id: String,

@@ -22,8 +22,8 @@ pub enum BaseCommitSource {
     File(String),
 }
 
-/// Read the `.claw-base` file from the given directory and return the trimmed
-/// commit hash, or `None` when the file is absent or empty.
+/// Read the `.claw-base` file (legacy name) from the given directory and return
+/// the trimmed commit hash, or `None` when the file is absent or empty.
 pub fn read_claw_base_file(cwd: &Path) -> Option<String> {
     let path = cwd.join(".claw-base");
     let content = std::fs::read_to_string(path).ok()?;

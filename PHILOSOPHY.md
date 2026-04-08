@@ -1,12 +1,12 @@
-# Claw Code Philosophy
+# ACE CLI Philosophy
 
 ## Stop Staring at the Files
 
 If you only look at the generated files in this repository, you are looking at the wrong layer.
 
-The Python rewrite was a byproduct. The Rust rewrite was also a byproduct. The real thing worth studying is the **system that produced them**: a clawhip-based coordination loop where humans give direction and autonomous claws execute the work.
+The Python rewrite was a byproduct. The Rust rewrite was also a byproduct. The real thing worth studying is the **system that produced them**: a coordination loop where humans give direction and autonomous agents execute the work.
 
-Claw Code is not just a codebase. It is a public demonstration of what happens when:
+ACE CLI is not just a codebase. It is a public demonstration of what happens when:
 
 - a human provides clear direction,
 - multiple coding agents coordinate in parallel,
@@ -22,7 +22,7 @@ The real human interface is a Discord channel.
 
 A person can type a sentence from a phone, walk away, sleep, or do something else. The claws read the directive, break it into tasks, assign roles, write code, run tests, argue over failures, recover, and push when the work passes.
 
-That is the philosophy: **humans set direction; claws perform the labor.**
+That is the philosophy: **humans set direction; agents perform the labor.**
 
 ## The Three-Part System
 
@@ -70,12 +70,12 @@ When agent systems can rebuild a codebase in hours, the scarce resource becomes:
 
 A fast agent team does not remove the need for thinking. It makes clear thinking even more valuable.
 
-## What Claw Code Demonstrates
+## What ACE CLI Demonstrates
 
-Claw Code demonstrates that a repository can be:
+ACE CLI demonstrates that a repository can be:
 
 - **autonomously built in public**
-- coordinated by claws/lobsters rather than human pair-programming alone
+- coordinated by agents rather than human pair-programming alone
 - operated through a chat interface
 - continuously improved by structured planning/execution/review loops
 - maintained as a showcase of the coordination layer, not just the output files
@@ -100,10 +100,10 @@ The job of the human is to decide what deserves to exist.
 
 ## Short Version
 
-**Claw Code is a demo of autonomous software development.**
+**ACE CLI is a demo of autonomous software development.**
 
 Humans provide direction.
-Claws coordinate, build, test, recover, and push.
+Agents coordinate, build, test, recover, and push.
 The repository is the artifact.
 The philosophy is the system behind it.
 

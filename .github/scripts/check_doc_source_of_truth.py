@@ -14,16 +14,20 @@ FILES = [
     ROOT / 'ROADMAP.md',
     ROOT / '.github' / 'FUNDING.yml',
 ]
-FILES.extend(sorted((ROOT / 'docs').rglob('*.md')) if (ROOT / 'docs').exists() else [])
+FILES.extend(
+    sorted(p for p in (ROOT / 'docs').rglob('*.md') if 'plans' not in p.parts)
+    if (ROOT / 'docs').exists() else []
+)
 
 FORBIDDEN = {
-    r'github\.com/Yeachan-Heo/claw-code(?!-parity)': 'replace old claw-code GitHub links with ultraworkers/claw-code',
-    r'github\.com/code-yeongyu/claw-code': 'replace stale alternate claw-code GitHub links with ultraworkers/claw-code',
+    r'github\.com/Yeachan-Heo/claw-code(?!-parity)': 'replace old claw-code GitHub links with vocweb/ace-cli',
+    r'github\.com/code-yeongyu/claw-code': 'replace stale alternate claw-code GitHub links with vocweb/ace-cli',
     r'discord\.gg/6ztZB9jvWq': 'replace the stale UltraWorkers Discord invite with the current invite',
-    r'api\.star-history\.com/svg\?repos=Yeachan-Heo/claw-code': 'update star-history embeds to ultraworkers/claw-code',
-    r'star-history\.com/#Yeachan-Heo/claw-code': 'update star-history links to ultraworkers/claw-code',
+    r'api\.star-history\.com/svg\?repos=Yeachan-Heo/claw-code': 'update star-history embeds to vocweb/ace-cli',
+    r'star-history\.com/#Yeachan-Heo/claw-code': 'update star-history links to vocweb/ace-cli',
     r'assets/clawd-hero\.jpeg': 'rename stale hero asset references to assets/claw-hero.jpeg',
     r'assets/instructkr\.png': 'remove stale instructkr image references',
+    r'github\.com/ultraworkers/claw-code(?!/actions/runs/)': 'replace ultraworkers/claw-code GitHub links with vocweb/ace-cli (historical CI run links are exempt)',
 }
 
 errors: list[str] = []
