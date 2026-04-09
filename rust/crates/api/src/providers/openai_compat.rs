@@ -19,6 +19,7 @@ use super::{preflight_message_request, Provider, ProviderFuture};
 pub const DEFAULT_XAI_BASE_URL: &str = "https://api.x.ai/v1";
 pub const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 pub const DEFAULT_DASHSCOPE_BASE_URL: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+pub const DEFAULT_OLLAMA_BASE_URL: &str = "http://localhost:11434";
 const REQUEST_ID_HEADER: &str = "request-id";
 const ALT_REQUEST_ID_HEADER: &str = "x-request-id";
 const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
@@ -36,6 +37,7 @@ pub struct OpenAiCompatConfig {
 const XAI_ENV_VARS: &[&str] = &["XAI_API_KEY"];
 const OPENAI_ENV_VARS: &[&str] = &["OPENAI_API_KEY"];
 const DASHSCOPE_ENV_VARS: &[&str] = &["DASHSCOPE_API_KEY"];
+const OLLAMA_ENV_VARS: &[&str] = &[];
 
 impl OpenAiCompatConfig {
     #[must_use]
@@ -72,12 +74,24 @@ impl OpenAiCompatConfig {
         }
     }
 
+    /// Local Ollama instance — OpenAI-compatible, no auth required.
+    #[must_use]
+    pub const fn ollama() -> Self {
+        Self {
+            provider_name: "Ollama",
+            api_key_env: "",
+            base_url_env: "OLLAMA_BASE_URL",
+            default_base_url: DEFAULT_OLLAMA_BASE_URL,
+        }
+    }
+
     #[must_use]
     pub fn credential_env_vars(self) -> &'static [&'static str] {
         match self.provider_name {
             "xAI" => XAI_ENV_VARS,
             "OpenAI" => OPENAI_ENV_VARS,
             "DashScope" => DASHSCOPE_ENV_VARS,
+            "Ollama" => OLLAMA_ENV_VARS,
             _ => &[],
         }
     }
@@ -117,6 +131,12 @@ impl OpenAiCompatClient {
     }
 
     pub fn from_env(config: OpenAiCompatConfig) -> Result<Self, ApiError> {
+        // When api_key_env is empty the provider requires no auth (e.g. local
+        // Ollama). Use an empty string so the Bearer header is effectively a
+        // no-op.
+        if config.api_key_env.is_empty() {
+            return Ok(Self::new(String::new(), config));
+        }
         let Some(api_key) = read_env_non_empty(config.api_key_env)? else {
             return Err(ApiError::missing_credentials(
                 config.provider_name,
@@ -734,7 +754,7 @@ fn strip_routing_prefix(model: &str) -> &str {
         let prefix = &model[..pos];
         // Only strip if the prefix before "/" is a known routing prefix,
         // not if "/" appears in the middle of the model name for other reasons.
-        if matches!(prefix, "openai" | "xai" | "grok" | "qwen") {
+        if matches!(prefix, "openai" | "xai" | "grok" | "qwen" | "ollama") {
             &model[pos + 1..]
         } else {
             model
@@ -742,6 +762,14 @@ fn strip_routing_prefix(model: &str) -> &str {
     } else {
         model
     }
+}
+
+/// Strip the `ollama/` routing prefix from a model name so the bare model
+/// id is sent to the local Ollama server.
+/// E.g. `"ollama/llama3"` → `"llama3"`, `"codestral"` → `"codestral"`.
+#[must_use]
+pub fn strip_ollama_prefix(model: &str) -> &str {
+    model.strip_prefix("ollama/").unwrap_or(model)
 }
 
 fn build_chat_completion_request(request: &MessageRequest, config: OpenAiCompatConfig) -> Value {

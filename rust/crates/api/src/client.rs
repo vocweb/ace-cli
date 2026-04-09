@@ -1,6 +1,7 @@
 use crate::error::ApiError;
 use crate::prompt_cache::{PromptCache, PromptCacheRecord, PromptCacheStats};
 use crate::providers::anthropic::{self, AnthropicClient, AuthSource};
+use crate::providers::gemini::{self, GeminiClient};
 use crate::providers::openai_compat::{self, OpenAiCompatClient, OpenAiCompatConfig};
 use crate::providers::{self, ProviderKind};
 use crate::types::{MessageRequest, MessageResponse, StreamEvent};
@@ -11,6 +12,8 @@ pub enum ProviderClient {
     Anthropic(AnthropicClient),
     Xai(OpenAiCompatClient),
     OpenAi(OpenAiCompatClient),
+    Gemini(GeminiClient),
+    Ollama(OpenAiCompatClient),
 }
 
 impl ProviderClient {
@@ -43,6 +46,10 @@ impl ProviderClient {
                 };
                 Ok(Self::OpenAi(OpenAiCompatClient::from_env(config)?))
             }
+            ProviderKind::Gemini => Ok(Self::Gemini(GeminiClient::from_env()?)),
+            ProviderKind::Ollama => {
+                Ok(Self::Ollama(OpenAiCompatClient::from_env(OpenAiCompatConfig::ollama())?))
+            }
         }
     }
 
@@ -52,6 +59,8 @@ impl ProviderClient {
             Self::Anthropic(_) => ProviderKind::Anthropic,
             Self::Xai(_) => ProviderKind::Xai,
             Self::OpenAi(_) => ProviderKind::OpenAi,
+            Self::Gemini(_) => ProviderKind::Gemini,
+            Self::Ollama(_) => ProviderKind::Ollama,
         }
     }
 
@@ -67,7 +76,7 @@ impl ProviderClient {
     pub fn prompt_cache_stats(&self) -> Option<PromptCacheStats> {
         match self {
             Self::Anthropic(client) => client.prompt_cache_stats(),
-            Self::Xai(_) | Self::OpenAi(_) => None,
+            Self::Xai(_) | Self::OpenAi(_) | Self::Gemini(_) | Self::Ollama(_) => None,
         }
     }
 
@@ -75,7 +84,7 @@ impl ProviderClient {
     pub fn take_last_prompt_cache_record(&self) -> Option<PromptCacheRecord> {
         match self {
             Self::Anthropic(client) => client.take_last_prompt_cache_record(),
-            Self::Xai(_) | Self::OpenAi(_) => None,
+            Self::Xai(_) | Self::OpenAi(_) | Self::Gemini(_) | Self::Ollama(_) => None,
         }
     }
 
@@ -85,7 +94,10 @@ impl ProviderClient {
     ) -> Result<MessageResponse, ApiError> {
         match self {
             Self::Anthropic(client) => client.send_message(request).await,
-            Self::Xai(client) | Self::OpenAi(client) => client.send_message(request).await,
+            Self::Xai(client) | Self::OpenAi(client) | Self::Ollama(client) => {
+                client.send_message(request).await
+            }
+            Self::Gemini(client) => client.send_message(request).await,
         }
     }
 
@@ -98,10 +110,14 @@ impl ProviderClient {
                 .stream_message(request)
                 .await
                 .map(MessageStream::Anthropic),
-            Self::Xai(client) | Self::OpenAi(client) => client
+            Self::Xai(client) | Self::OpenAi(client) | Self::Ollama(client) => client
                 .stream_message(request)
                 .await
                 .map(MessageStream::OpenAiCompat),
+            Self::Gemini(client) => client
+                .stream_message(request)
+                .await
+                .map(MessageStream::Gemini),
         }
     }
 }
@@ -110,6 +126,7 @@ impl ProviderClient {
 pub enum MessageStream {
     Anthropic(anthropic::MessageStream),
     OpenAiCompat(openai_compat::MessageStream),
+    Gemini(gemini::GeminiMessageStream),
 }
 
 impl MessageStream {
@@ -118,6 +135,7 @@ impl MessageStream {
         match self {
             Self::Anthropic(stream) => stream.request_id(),
             Self::OpenAiCompat(stream) => stream.request_id(),
+            Self::Gemini(stream) => stream.request_id(),
         }
     }
 
@@ -125,6 +143,7 @@ impl MessageStream {
         match self {
             Self::Anthropic(stream) => stream.next_event().await,
             Self::OpenAiCompat(stream) => stream.next_event().await,
+            Self::Gemini(stream) => stream.next_event().await,
         }
     }
 }
@@ -142,11 +161,22 @@ pub fn read_xai_base_url() -> String {
     openai_compat::read_base_url(OpenAiCompatConfig::xai())
 }
 
+#[must_use]
+pub fn read_gemini_base_url() -> String {
+    gemini::read_base_url()
+}
+
+#[must_use]
+pub fn read_ollama_base_url() -> String {
+    openai_compat::read_base_url(OpenAiCompatConfig::ollama())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Mutex, OnceLock};
 
     use super::ProviderClient;
+    use crate::providers::openai_compat::strip_ollama_prefix;
     use crate::providers::{detect_provider_kind, resolve_model_alias, ProviderKind};
 
     /// Serializes every test in this module that mutates process-wide
@@ -234,6 +264,74 @@ mod tests {
             }
             other => panic!(
                 "Expected ProviderClient::OpenAi for qwen-plus, got: {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
+    fn detects_gemini_provider() {
+        assert_eq!(
+            detect_provider_kind("gemini-2.5-pro-preview-05-06"),
+            ProviderKind::Gemini
+        );
+        assert_eq!(
+            detect_provider_kind("gemini-2.5-flash-preview-04-17"),
+            ProviderKind::Gemini
+        );
+    }
+
+    #[test]
+    fn resolves_gemini_aliases() {
+        assert_eq!(
+            resolve_model_alias("gemini-pro"),
+            "gemini-2.5-pro-preview-05-06"
+        );
+        assert_eq!(
+            resolve_model_alias("gemini-flash"),
+            "gemini-2.5-flash-preview-04-17"
+        );
+    }
+
+    #[test]
+    fn detects_ollama_provider() {
+        assert_eq!(
+            detect_provider_kind("ollama/llama3"),
+            ProviderKind::Ollama
+        );
+        assert_eq!(
+            detect_provider_kind("ollama/codestral"),
+            ProviderKind::Ollama
+        );
+    }
+
+    #[test]
+    fn ollama_model_prefix_stripped() {
+        assert_eq!(strip_ollama_prefix("ollama/llama3"), "llama3");
+        assert_eq!(strip_ollama_prefix("codestral"), "codestral");
+    }
+
+    #[test]
+    fn ollama_client_requires_no_api_key() {
+        // Ollama needs no auth — from_env should succeed even without any
+        // env vars set, because api_key_env is empty.
+        let _lock = env_lock();
+        let client = ProviderClient::from_model("ollama/llama3");
+        assert!(
+            client.is_ok(),
+            "ollama/llama3 should build without any API key, got: {:?}",
+            client.err()
+        );
+        match client.unwrap() {
+            ProviderClient::Ollama(ollama_client) => {
+                assert!(
+                    ollama_client.base_url().contains("localhost:11434"),
+                    "ollama should route to localhost:11434, got: {}",
+                    ollama_client.base_url()
+                );
+            }
+            other => panic!(
+                "Expected ProviderClient::Ollama for ollama/llama3, got: {:?}",
                 other
             ),
         }
