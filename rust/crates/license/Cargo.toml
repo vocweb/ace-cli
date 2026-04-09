@@ -1,0 +1,10 @@
+[package]
+name = "license"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "ACE license tier management (placeholder)"
+
+[lints]
+workspace = true
