@@ -130,8 +130,10 @@ cd rust
 ### Anthropic-compatible endpoint
 
 ```bash
-export ANTHROPIC_BASE_URL="http://127.0.0.1:8080"
+export ANTHROPIC_BASE_URL="http://127.0.0.1:11434"
 export ANTHROPIC_AUTH_TOKEN="local-dev-token"
+echo $ANTHROPIC_BASE_URL
+echo $ANTHROPIC_AUTH_TOKEN
 
 cd rust
 ./target/debug/ace --model "claude-sonnet-4-6" prompt "reply with the word ready"

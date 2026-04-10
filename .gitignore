@@ -1,5 +1,6 @@
 __pycache__/
 archive/
+docs/prompt/
 .omx/
 .clawd-agents/
 # Claude Code local artifacts
