@@ -266,15 +266,30 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             reasoning_effort,
             allow_broad_cwd,
             show_thinking,
-        } => run_repl(
-            model,
-            allowed_tools,
-            permission_mode,
-            base_commit,
-            reasoning_effort,
-            allow_broad_cwd,
-            show_thinking,
-        )?,
+            tui,
+        } => {
+            if tui {
+                run_tui_repl(
+                    model,
+                    allowed_tools,
+                    permission_mode,
+                    base_commit,
+                    reasoning_effort,
+                    allow_broad_cwd,
+                    show_thinking,
+                )?;
+            } else {
+                run_repl(
+                    model,
+                    allowed_tools,
+                    permission_mode,
+                    base_commit,
+                    reasoning_effort,
+                    allow_broad_cwd,
+                    show_thinking,
+                )?;
+            }
+        }
         CliAction::HelpTopic(topic) => print_help_topic(topic),
         CliAction::Help { output_format } => print_help(output_format)?,
     }
@@ -366,6 +381,7 @@ enum CliAction {
         reasoning_effort: Option<String>,
         allow_broad_cwd: bool,
         show_thinking: bool,
+        tui: bool,
     },
     HelpTopic(LocalHelpTopic),
     // prompt-mode formatting is only supported for non-interactive runs
@@ -412,6 +428,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
     let mut reasoning_effort: Option<String> = None;
     let mut allow_broad_cwd = false;
     let mut show_thinking = false;
+    let mut tui_mode = false;
     let mut rest: Vec<String> = Vec::new();
     let mut index = 0;
 
@@ -528,6 +545,9 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
                 allow_broad_cwd = true;
                 index += 1;
             }
+            "--tui" => {
+                tui_mode = true;
+            }
             "--show-thinking" => {
                 show_thinking = true;
                 index += 1;
@@ -632,6 +652,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
             reasoning_effort: reasoning_effort.clone(),
             allow_broad_cwd,
             show_thinking,
+            tui: tui_mode,
         });
     }
     if rest.first().map(String::as_str) == Some("--resume") {
@@ -3242,6 +3263,186 @@ fn run_repl(
     Ok(())
 }
 
+/// TUI REPL mode: ratatui alternate screen with 3-zone layout (content, input, HUD footer).
+///
+/// Uses a screen-swap strategy during turn execution: temporarily exits the
+/// alternate screen to use normal stdout for streaming output, then re-enters
+/// the TUI with the HUD updated.
+#[allow(clippy::too_many_arguments)]
+fn run_tui_repl(
+    model: String,
+    allowed_tools: Option<AllowedToolSet>,
+    permission_mode: PermissionMode,
+    base_commit: Option<String>,
+    reasoning_effort: Option<String>,
+    allow_broad_cwd: bool,
+    show_thinking: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+    use ratatui::style::{Color as RColor, Style as RStyle};
+
+    enforce_broad_cwd_policy(allow_broad_cwd, CliOutputFormat::Text)?;
+    run_stale_base_preflight(base_commit.as_deref());
+    let resolved_model = resolve_repl_model(model);
+    let mut cli = LiveCli::new(
+        resolved_model,
+        true,
+        allowed_tools,
+        permission_mode,
+    )?;
+    cli.set_reasoning_effort(reasoning_effort);
+    if show_thinking {
+        cli.set_show_thinking(true);
+    }
+
+    let cwd = env::current_dir()
+        .unwrap_or_default()
+        .display()
+        .to_string();
+
+    // Initialise TUI
+    let mut terminal = tui_app::init_terminal()?;
+    // Install panic hook to always restore terminal
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let _ = tui_app::restore_terminal();
+        original_hook(panic_info);
+    }));
+
+    let mut app = tui_app::TuiApp::new(cli.model.clone(), cwd);
+    app.hud.refresh_git();
+
+    // Push startup banner into Zone 1
+    app.push_text(
+        format!("🐙 ACE CLI — {}", cli.model),
+        RStyle::default().fg(RColor::Cyan),
+    );
+    app.push_text(
+        format!("  Session: {}", cli.session.id),
+        RStyle::default().fg(RColor::DarkGray),
+    );
+    app.push_text(String::new(), RStyle::default());
+
+    loop {
+        // Draw TUI
+        terminal.draw(|frame| app.render(frame))?;
+
+        // Poll for events with 33ms timeout (~30fps)
+        if event::poll(Duration::from_millis(33))? {
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    // PageUp/PageDown for scrolling Zone 1
+                    match (key.code, key.modifiers) {
+                        (KeyCode::PageUp, _) => {
+                            app.scroll_up(10);
+                            continue;
+                        }
+                        (KeyCode::PageDown, _) => {
+                            app.scroll_down(10);
+                            continue;
+                        }
+                        _ => {}
+                    }
+
+                    match app.input.handle_key(key) {
+                        tui_input::InputAction::Submit(text) => {
+                            let trimmed = text.trim().to_string();
+                            if trimmed.is_empty() {
+                                continue;
+                            }
+                            if matches!(trimmed.as_str(), "/exit" | "/quit") {
+                                cli.persist_session()?;
+                                app.should_quit = true;
+                                continue;
+                            }
+
+                            // Record prompt in Zone 1
+                            app.push_text(
+                                format!("> {trimmed}"),
+                                RStyle::default().fg(RColor::White).add_modifier(
+                                    ratatui::style::Modifier::BOLD,
+                                ),
+                            );
+
+                            // --- Screen swap: leave TUI for turn execution ---
+                            tui_app::restore_terminal()?;
+                            println!(); // spacing
+
+                            // Handle slash commands
+                            let handled = match SlashCommand::parse(&trimmed) {
+                                Ok(Some(command)) => {
+                                    let _ = cli.handle_repl_command(command);
+                                    true
+                                }
+                                Ok(None) => false,
+                                Err(error) => {
+                                    eprintln!("{error}");
+                                    true
+                                }
+                            };
+
+                            if !handled {
+                                // Run the turn (streams to stdout normally)
+                                app.hud.start_turn();
+                                cli.record_prompt_history(&trimmed);
+                                match cli.run_turn(&trimmed) {
+                                    Ok(()) => {
+                                        // Update HUD after turn
+                                        app.hud.turn_start = None;
+                                        app.hud.refresh_git();
+                                        // Token usage is tracked inside runtime;
+                                        // extract cumulative usage
+                                        if let Some(usage) = cli.cumulative_token_usage() {
+                                            let total = u64::from(usage.input_tokens)
+                                                + u64::from(usage.output_tokens);
+                                            app.hud.update_tokens(total, app.hud.tokens_max);
+                                        }
+                                        app.push_text(
+                                            "✨ Done".to_string(),
+                                            RStyle::default().fg(RColor::Green),
+                                        );
+                                        app.push_text(String::new(), RStyle::default());
+                                    }
+                                    Err(error) => {
+                                        app.push_text(
+                                            format!("❌ Error: {error}"),
+                                            RStyle::default().fg(RColor::Red),
+                                        );
+                                    }
+                                }
+                            }
+
+                            // --- Re-enter TUI ---
+                            terminal = tui_app::init_terminal()?;
+                        }
+                        tui_input::InputAction::Exit => {
+                            cli.persist_session()?;
+                            app.should_quit = true;
+                        }
+                        tui_input::InputAction::Changed | tui_input::InputAction::None => {}
+                    }
+                }
+                Event::Paste(text) => {
+                    app.input.handle_paste(text);
+                }
+                Event::Mouse(mouse) => match mouse.kind {
+                    crossterm::event::MouseEventKind::ScrollUp => app.scroll_up(3),
+                    crossterm::event::MouseEventKind::ScrollDown => app.scroll_down(3),
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+
+        if app.should_quit {
+            break;
+        }
+    }
+
+    tui_app::restore_terminal()?;
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 struct SessionHandle {
     id: String,
@@ -3792,6 +3993,10 @@ impl LiveCli {
         if let Some(rt) = self.runtime.runtime.as_mut() {
             rt.api_client_mut().set_reasoning_effort(effort);
         }
+    }
+
+    fn cumulative_token_usage(&self) -> Option<runtime::TokenUsage> {
+        Some(self.runtime.usage().cumulative_usage())
     }
 
     fn startup_banner(&self) -> String {
@@ -9279,6 +9484,7 @@ mod tests {
                 reasoning_effort: None,
                 allow_broad_cwd: false,
                 show_thinking: false,
+                tui: false,
             }
         );
     }
@@ -9689,6 +9895,7 @@ mod tests {
                 reasoning_effort: None,
                 allow_broad_cwd: false,
                 show_thinking: false,
+                tui: false,
             }
         );
     }
@@ -9711,6 +9918,7 @@ mod tests {
                 reasoning_effort: None,
                 allow_broad_cwd: false,
                 show_thinking: false,
+                tui: false,
             }
         );
     }
@@ -9769,6 +9977,7 @@ mod tests {
                 reasoning_effort: None,
                 allow_broad_cwd: false,
                 show_thinking: false,
+                tui: false,
             }
         );
     }
