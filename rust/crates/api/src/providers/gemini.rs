@@ -80,10 +80,12 @@ impl GeminiClient {
         preflight_message_request(&request)?;
         let response = self.send_with_retry(&request, false).await?;
         let request_id = request_id_from_headers(response.headers());
-        let body = response.text().await.map_err(|e| ApiError::from(e.without_url()))?;
-        let payload: Value = serde_json::from_str(&body).map_err(|error| {
-            ApiError::json_deserialize("Gemini", &request.model, &body, error)
-        })?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| ApiError::from(e.without_url()))?;
+        let payload: Value = serde_json::from_str(&body)
+            .map_err(|error| ApiError::json_deserialize("Gemini", &request.model, &body, error))?;
         let mut normalized = convert_response(&request.model, payload)?;
         if normalized.request_id.is_none() {
             normalized.request_id = request_id;
@@ -120,9 +122,7 @@ impl GeminiClient {
             let retryable_error = match self.send_raw_request(request, streaming).await {
                 Ok(response) => match expect_success(response).await {
                     Ok(response) => return Ok(response),
-                    Err(error) if error.is_retryable() && attempts <= self.max_retries + 1 => {
-                        error
-                    }
+                    Err(error) if error.is_retryable() && attempts <= self.max_retries + 1 => error,
                     Err(error) => return Err(error),
                 },
                 Err(error) if error.is_retryable() && attempts <= self.max_retries + 1 => error,
@@ -408,11 +408,9 @@ fn convert_response(model: &str, payload: Value) -> Result<MessageResponse, ApiE
         .ok_or(ApiError::InvalidSseFrame(
             "Gemini response missing candidates",
         ))?;
-    let candidate = candidates
-        .first()
-        .ok_or(ApiError::InvalidSseFrame(
-            "Gemini response has empty candidates",
-        ))?;
+    let candidate = candidates.first().ok_or(ApiError::InvalidSseFrame(
+        "Gemini response has empty candidates",
+    ))?;
 
     let mut content = Vec::new();
     if let Some(parts) = candidate["content"]["parts"].as_array() {
@@ -444,10 +442,7 @@ fn convert_response(model: &str, payload: Value) -> Result<MessageResponse, ApiE
     let usage = extract_usage(&payload);
 
     Ok(MessageResponse {
-        id: payload["responseId"]
-            .as_str()
-            .unwrap_or("")
-            .to_string(),
+        id: payload["responseId"].as_str().unwrap_or("").to_string(),
         kind: "message".to_string(),
         role: "assistant".to_string(),
         content,
@@ -462,14 +457,10 @@ fn convert_response(model: &str, payload: Value) -> Result<MessageResponse, ApiE
 fn extract_usage(payload: &Value) -> Usage {
     let usage_meta = &payload["usageMetadata"];
     Usage {
-        input_tokens: usage_meta["promptTokenCount"]
-            .as_u64()
-            .unwrap_or(0) as u32,
+        input_tokens: usage_meta["promptTokenCount"].as_u64().unwrap_or(0) as u32,
         cache_creation_input_tokens: 0,
         cache_read_input_tokens: 0,
-        output_tokens: usage_meta["candidatesTokenCount"]
-            .as_u64()
-            .unwrap_or(0) as u32,
+        output_tokens: usage_meta["candidatesTokenCount"].as_u64().unwrap_or(0) as u32,
     }
 }
 
@@ -519,7 +510,12 @@ impl GeminiMessageStream {
                 return Ok(None);
             }
 
-            match self.response.chunk().await.map_err(|e| ApiError::from(e.without_url()))? {
+            match self
+                .response
+                .chunk()
+                .await
+                .map_err(|e| ApiError::from(e.without_url()))?
+            {
                 Some(chunk) => {
                     for parsed in self.parser.push(&chunk)? {
                         self.pending.extend(self.state.ingest_chunk(parsed)?);
@@ -640,10 +636,7 @@ impl StreamState {
             self.message_started = true;
             events.push(StreamEvent::MessageStart(MessageStartEvent {
                 message: MessageResponse {
-                    id: chunk["responseId"]
-                        .as_str()
-                        .unwrap_or("")
-                        .to_string(),
+                    id: chunk["responseId"].as_str().unwrap_or("").to_string(),
                     kind: "message".to_string(),
                     role: "assistant".to_string(),
                     content: Vec::new(),
@@ -699,12 +692,8 @@ impl StreamState {
 
                         // Function calls
                         if let Some(fc) = part.get("functionCall") {
-                            let name =
-                                fc["name"].as_str().unwrap_or("").to_string();
-                            let args = fc
-                                .get("args")
-                                .cloned()
-                                .unwrap_or(json!({}));
+                            let name = fc["name"].as_str().unwrap_or("").to_string();
+                            let args = fc.get("args").cloned().unwrap_or(json!({}));
                             let idx = self.tool_calls.len();
                             let block_index = (idx + 1) as u32;
                             let id = format!("call_{name}_{idx}");
@@ -717,24 +706,20 @@ impl StreamState {
                             };
                             self.tool_calls.insert(idx, state);
 
-                            events.push(StreamEvent::ContentBlockStart(
-                                ContentBlockStartEvent {
-                                    index: block_index,
-                                    content_block: OutputContentBlock::ToolUse {
-                                        id,
-                                        name,
-                                        input: json!({}),
-                                    },
+                            events.push(StreamEvent::ContentBlockStart(ContentBlockStartEvent {
+                                index: block_index,
+                                content_block: OutputContentBlock::ToolUse {
+                                    id,
+                                    name,
+                                    input: json!({}),
                                 },
-                            ));
-                            events.push(StreamEvent::ContentBlockDelta(
-                                ContentBlockDeltaEvent {
-                                    index: block_index,
-                                    delta: ContentBlockDelta::InputJsonDelta {
-                                        partial_json: args.to_string(),
-                                    },
+                            }));
+                            events.push(StreamEvent::ContentBlockDelta(ContentBlockDeltaEvent {
+                                index: block_index,
+                                delta: ContentBlockDelta::InputJsonDelta {
+                                    partial_json: args.to_string(),
                                 },
-                            ));
+                            }));
                         }
                     }
                 }
@@ -747,11 +732,9 @@ impl StreamState {
                     for (idx, state) in &mut self.tool_calls {
                         if state.started && !state.stopped {
                             state.stopped = true;
-                            events.push(StreamEvent::ContentBlockStop(
-                                ContentBlockStopEvent {
-                                    index: (*idx as u32) + 1,
-                                },
-                            ));
+                            events.push(StreamEvent::ContentBlockStop(ContentBlockStopEvent {
+                                index: (*idx as u32) + 1,
+                            }));
                         }
                     }
                 }
@@ -934,10 +917,7 @@ mod tests {
             body["tools"][0]["functionDeclarations"][0]["name"],
             "weather"
         );
-        assert_eq!(
-            body["toolConfig"]["functionCallingConfig"]["mode"],
-            "AUTO"
-        );
+        assert_eq!(body["toolConfig"]["functionCallingConfig"]["mode"], "AUTO");
     }
 
     #[test]
@@ -1033,7 +1013,10 @@ mod tests {
         );
         let url = client.stream_endpoint("gemini-2.5-pro-preview-05-06");
         assert!(url.contains("/v1beta/models/gemini-2.5-pro-preview-05-06:streamGenerateContent"));
-        assert!(!url.contains("key=test-key"), "API key must not appear in URL");
+        assert!(
+            !url.contains("key=test-key"),
+            "API key must not appear in URL"
+        );
         assert!(url.contains("alt=sse"));
     }
 
@@ -1045,6 +1028,9 @@ mod tests {
         );
         let debug_output = format!("{:?}", client);
         assert!(debug_output.contains("[REDACTED]"));
-        assert!(!debug_output.contains("super-secret-key"), "API key must be redacted in Debug output");
+        assert!(
+            !debug_output.contains("super-secret-key"),
+            "API key must be redacted in Debug output"
+        );
     }
 }

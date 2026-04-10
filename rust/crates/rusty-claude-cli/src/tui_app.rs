@@ -80,7 +80,7 @@ impl TuiApp {
         let hud_height: u16 = if frame.area().width < 60 { 1 } else { 2 };
 
         let chunks = Layout::vertical([
-            Constraint::Min(3),              // Zone 1: Content
+            Constraint::Min(3),               // Zone 1: Content
             Constraint::Length(input_height), // Zone 2: Input
             Constraint::Length(hud_height),   // Zone 3: HUD
         ])
@@ -100,20 +100,20 @@ impl TuiApp {
         let start = if total_lines <= visible_height {
             0
         } else {
-            self.scroll_offset.min(total_lines.saturating_sub(visible_height))
+            self.scroll_offset
+                .min(total_lines.saturating_sub(visible_height))
         };
         let end = (start + visible_height).min(total_lines);
 
-        let visible_lines: Vec<Line<'static>> =
-            self.content_lines[start..end].to_vec();
+        let visible_lines: Vec<Line<'static>> = self.content_lines[start..end].to_vec();
 
         let paragraph = Paragraph::new(visible_lines).wrap(Wrap { trim: false });
         frame.render_widget(paragraph, area);
 
         // Render scrollbar if content exceeds visible area
         if total_lines > visible_height {
-            let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height))
-                .position(start);
+            let mut scrollbar_state =
+                ScrollbarState::new(total_lines.saturating_sub(visible_height)).position(start);
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
             frame.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
         }

@@ -186,7 +186,10 @@ impl OpenAiCompatClient {
         preflight_message_request(&request)?;
         let response = self.send_with_retry(&request).await?;
         let request_id = request_id_from_headers(response.headers());
-        let body = response.text().await.map_err(|e| ApiError::from(e.without_url()))?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| ApiError::from(e.without_url()))?;
         // Some backends return {"error":{"message":"...","type":"...","code":...}}
         // instead of a valid completion object. Check for this before attempting
         // full deserialization so the user sees the actual error, not a cryptic
@@ -398,7 +401,12 @@ impl MessageStream {
                 return Ok(None);
             }
 
-            match self.response.chunk().await.map_err(|e| ApiError::from(e.without_url()))? {
+            match self
+                .response
+                .chunk()
+                .await
+                .map_err(|e| ApiError::from(e.without_url()))?
+            {
                 Some(chunk) => {
                     for parsed in self.parser.push(&chunk)? {
                         self.pending.extend(self.state.ingest_chunk(parsed)?);

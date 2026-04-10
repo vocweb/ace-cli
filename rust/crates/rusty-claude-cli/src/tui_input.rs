@@ -79,7 +79,9 @@ impl TuiInput {
             }
 
             // Ctrl+C -> Exit
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => InputAction::Exit,
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                InputAction::Exit
+            }
 
             // Ctrl+D on empty -> Exit
             KeyCode::Char('d')

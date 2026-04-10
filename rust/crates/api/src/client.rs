@@ -47,9 +47,9 @@ impl ProviderClient {
                 Ok(Self::OpenAi(OpenAiCompatClient::from_env(config)?))
             }
             ProviderKind::Gemini => Ok(Self::Gemini(GeminiClient::from_env()?)),
-            ProviderKind::Ollama => {
-                Ok(Self::Ollama(OpenAiCompatClient::from_env(OpenAiCompatConfig::ollama())?))
-            }
+            ProviderKind::Ollama => Ok(Self::Ollama(OpenAiCompatClient::from_env(
+                OpenAiCompatConfig::ollama(),
+            )?)),
         }
     }
 
@@ -295,10 +295,7 @@ mod tests {
 
     #[test]
     fn detects_ollama_provider() {
-        assert_eq!(
-            detect_provider_kind("ollama/llama3"),
-            ProviderKind::Ollama
-        );
+        assert_eq!(detect_provider_kind("ollama/llama3"), ProviderKind::Ollama);
         assert_eq!(
             detect_provider_kind("ollama/codestral"),
             ProviderKind::Ollama

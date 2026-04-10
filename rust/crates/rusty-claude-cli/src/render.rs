@@ -50,16 +50,7 @@ pub struct Spinner {
 }
 
 impl Spinner {
-    const FRAMES: [&str; 8] = [
-        "🐙",
-        " 🐙",
-        "  🐙",
-        "   🐙",
-        "  🐙",
-        " 🐙",
-        "🐙",
-        "🐙 ",
-    ];
+    const FRAMES: [&str; 8] = ["🐙", " 🐙", "  🐙", "   🐙", "  🐙", " 🐙", "🐙", "🐙 "];
 
     #[must_use]
     pub fn new() -> Self {
@@ -615,7 +606,7 @@ impl TerminalRenderer {
     /// `inline_code` colour instead.
     #[must_use]
     pub fn render_markdown_to_lines(&self, markdown: &str) -> Vec<ratatui::text::Line<'static>> {
-        use ratatui::prelude::{Color as RColor, Span, Style, Modifier, Line as RLine};
+        use ratatui::prelude::{Color as RColor, Line as RLine, Modifier, Span, Style};
 
         let normalized = normalize_nested_fences(markdown);
         let mut lines: Vec<RLine<'static>> = Vec::new();
@@ -674,21 +665,27 @@ impl TerminalRenderer {
                         .add_modifier(Modifier::ITALIC);
                     style_stack.push(style);
                 }
-                Event::End(TagEnd::Emphasis) => { style_stack.pop(); }
+                Event::End(TagEnd::Emphasis) => {
+                    style_stack.pop();
+                }
                 Event::Start(Tag::Strong) => {
                     let style = Style::default()
                         .fg(map_color(theme.strong))
                         .add_modifier(Modifier::BOLD);
                     style_stack.push(style);
                 }
-                Event::End(TagEnd::Strong) => { style_stack.pop(); }
+                Event::End(TagEnd::Strong) => {
+                    style_stack.pop();
+                }
                 Event::Start(Tag::Link { .. }) => {
                     let style = Style::default()
                         .fg(map_color(theme.link))
                         .add_modifier(Modifier::UNDERLINED);
                     style_stack.push(style);
                 }
-                Event::End(TagEnd::Link) => { style_stack.pop(); }
+                Event::End(TagEnd::Link) => {
+                    style_stack.pop();
+                }
                 Event::Start(Tag::BlockQuote(..)) => {
                     let style = Style::default().fg(map_color(theme.quote));
                     style_stack.push(style);
@@ -768,10 +765,15 @@ impl TerminalRenderer {
 
     /// Format a tool-call start as styled `Line` values for the TUI.
     #[must_use]
-    pub fn format_tool_start_lines(tool_name: &str, input: &str) -> Vec<ratatui::text::Line<'static>> {
-        use ratatui::prelude::{Color as RColor, Span, Style, Modifier, Line as RLine};
+    pub fn format_tool_start_lines(
+        tool_name: &str,
+        input: &str,
+    ) -> Vec<ratatui::text::Line<'static>> {
+        use ratatui::prelude::{Color as RColor, Line as RLine, Modifier, Span, Style};
         let border_style = Style::default().fg(RColor::DarkGray);
-        let name_style = Style::default().fg(RColor::Cyan).add_modifier(Modifier::BOLD);
+        let name_style = Style::default()
+            .fg(RColor::Cyan)
+            .add_modifier(Modifier::BOLD);
         vec![
             RLine::from(vec![
                 Span::styled("  ╭─ ".to_string(), border_style),
@@ -792,7 +794,7 @@ impl TerminalRenderer {
         output: &str,
         is_error: bool,
     ) -> Vec<ratatui::text::Line<'static>> {
-        use ratatui::prelude::{Color as RColor, Span, Style, Line as RLine};
+        use ratatui::prelude::{Color as RColor, Line as RLine, Span, Style};
         let border_style = Style::default().fg(RColor::DarkGray);
         let (icon, color) = if is_error {
             ("✗", RColor::Red)
@@ -809,7 +811,10 @@ impl TerminalRenderer {
                 Span::raw(truncate_display(line, 160)),
             ]));
         }
-        result.push(RLine::from(Span::styled("  ╰───╯".to_string(), border_style)));
+        result.push(RLine::from(Span::styled(
+            "  ╰───╯".to_string(),
+            border_style,
+        )));
         result
     }
 }
@@ -1194,11 +1199,7 @@ impl ThinkingDisplay {
         let line_count = visible.len();
         for (i, line) in visible.iter().enumerate() {
             // Truncate long lines to avoid wrapping issues
-            let display_line = if line.len() > 120 {
-                &line[..117]
-            } else {
-                line
-            };
+            let display_line = if line.len() > 120 { &line[..117] } else { line };
             write!(out, "{ANSI_DIM_GREY}{display_line}{ANSI_RESET}")?;
             if i < line_count - 1 {
                 write!(out, "\n")?;

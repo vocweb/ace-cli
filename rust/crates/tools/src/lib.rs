@@ -4286,7 +4286,9 @@ fn normalize_subagent_type(subagent_type: Option<&str>) -> String {
         "verification" | "verificationagent" | "verify" | "verifier" => {
             String::from("Verification")
         }
-        "clawguide" | "clawguideagent" | "aceguide" | "aceguideagent" | "guide" => String::from("ace-guide"),
+        "clawguide" | "clawguideagent" | "aceguide" | "aceguideagent" | "guide" => {
+            String::from("ace-guide")
+        }
         "statusline" | "statuslinesetup" => String::from("statusline-setup"),
         _ => trimmed.to_string(),
     }

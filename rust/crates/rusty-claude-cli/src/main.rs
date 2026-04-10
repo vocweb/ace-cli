@@ -3284,21 +3284,13 @@ fn run_tui_repl(
     enforce_broad_cwd_policy(allow_broad_cwd, CliOutputFormat::Text)?;
     run_stale_base_preflight(base_commit.as_deref());
     let resolved_model = resolve_repl_model(model);
-    let mut cli = LiveCli::new(
-        resolved_model,
-        true,
-        allowed_tools,
-        permission_mode,
-    )?;
+    let mut cli = LiveCli::new(resolved_model, true, allowed_tools, permission_mode)?;
     cli.set_reasoning_effort(reasoning_effort);
     if show_thinking {
         cli.set_show_thinking(true);
     }
 
-    let cwd = env::current_dir()
-        .unwrap_or_default()
-        .display()
-        .to_string();
+    let cwd = env::current_dir().unwrap_or_default().display().to_string();
 
     // Initialise TUI
     let mut terminal = tui_app::init_terminal()?;
@@ -3359,9 +3351,9 @@ fn run_tui_repl(
                             // Record prompt in Zone 1
                             app.push_text(
                                 format!("> {trimmed}"),
-                                RStyle::default().fg(RColor::White).add_modifier(
-                                    ratatui::style::Modifier::BOLD,
-                                ),
+                                RStyle::default()
+                                    .fg(RColor::White)
+                                    .add_modifier(ratatui::style::Modifier::BOLD),
                             );
 
                             // --- Screen swap: leave TUI for turn execution ---
@@ -4384,10 +4376,7 @@ impl LiveCli {
             SlashCommand::Thinking => {
                 let new_state = !self.show_thinking;
                 self.set_show_thinking(new_state);
-                eprintln!(
-                    "Thinking display: {}",
-                    if new_state { "on" } else { "off" }
-                );
+                eprintln!("Thinking display: {}", if new_state { "on" } else { "off" });
                 false
             }
             // ── Still unimplemented stubs ────────────────────────
@@ -5192,7 +5181,10 @@ impl LiveCli {
                 if name.is_empty() {
                     eprintln!("Usage: /team create <name>");
                 } else {
-                    println!("Team '{}' registered. (session-local, not yet persisted)", name);
+                    println!(
+                        "Team '{}' registered. (session-local, not yet persisted)",
+                        name
+                    );
                 }
             }
             Some(other) => {
@@ -5326,18 +5318,24 @@ impl LiveCli {
     }
 
     fn handle_providers() {
-        let anthropic_key = env::var("ANTHROPIC_API_KEY")
-            .ok()
-            .filter(|v| !v.is_empty());
+        let anthropic_key = env::var("ANTHROPIC_API_KEY").ok().filter(|v| !v.is_empty());
         let gemini_key = env::var("GEMINI_API_KEY").ok().filter(|v| !v.is_empty());
         println!("Available providers:");
         println!(
             "  - anthropic  (ANTHROPIC_API_KEY: {})",
-            if anthropic_key.is_some() { "set" } else { "not set" }
+            if anthropic_key.is_some() {
+                "set"
+            } else {
+                "not set"
+            }
         );
         println!(
             "  - gemini     (GEMINI_API_KEY: {}) [coming soon]",
-            if gemini_key.is_some() { "set" } else { "not set" }
+            if gemini_key.is_some() {
+                "set"
+            } else {
+                "not set"
+            }
         );
         println!("  - ollama     (localhost:11434) [coming soon]");
     }
@@ -5385,7 +5383,10 @@ impl LiveCli {
         println!("  Session file:     {}", self.session.path.display());
         println!("  Working dir:      {}", cwd.display());
         println!("  Permission mode:  {}", self.permission_mode.as_str());
-        println!("  Messages:         {}", self.runtime.session().messages.len());
+        println!(
+            "  Messages:         {}",
+            self.runtime.session().messages.len()
+        );
         println!("  Turns:            {}", self.runtime.usage().turns());
         println!("  Est. tokens:      {estimated_tokens}");
     }
@@ -8974,10 +8975,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "ace v{VERSION}")?;
     writeln!(out)?;
     writeln!(out, "Usage:")?;
-    writeln!(
-        out,
-        "  ace [--model MODEL] [--allowedTools TOOL[,TOOL...]]"
-    )?;
+    writeln!(out, "  ace [--model MODEL] [--allowedTools TOOL[,TOOL...]]")?;
     writeln!(out, "      Start the interactive REPL")?;
     writeln!(
         out,

@@ -153,19 +153,11 @@ impl<'a> HudFooter<'a> {
                 todo_text.push_str(&truncated);
             }
 
-            spans.push(Span::styled(
-                todo_text,
-                Style::default().fg(todo_color),
-            ));
+            spans.push(Span::styled(todo_text, Style::default().fg(todo_color)));
         }
 
         // --- Running agents (only if there are active agents) ---
-        let active_agents: Vec<_> = self
-            .state
-            .agents
-            .iter()
-            .filter(|a| !a.completed)
-            .collect();
+        let active_agents: Vec<_> = self.state.agents.iter().filter(|a| !a.completed).collect();
 
         if !active_agents.is_empty() {
             spans.push(Span::styled(
@@ -283,8 +275,7 @@ mod tests {
         state.todos_total = 5;
         state.todos_done = 2;
         state.current_task = Some(
-            "This is a very long task name that should be truncated to thirty chars"
-                .to_string(),
+            "This is a very long task name that should be truncated to thirty chars".to_string(),
         );
 
         let footer = HudFooter::new(&state);
