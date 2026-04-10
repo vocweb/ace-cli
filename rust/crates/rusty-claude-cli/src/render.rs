@@ -50,7 +50,16 @@ pub struct Spinner {
 }
 
 impl Spinner {
-    const FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    const FRAMES: [&str; 8] = [
+        "🐙",
+        " 🐙",
+        "  🐙",
+        "   🐙",
+        "  🐙",
+        " 🐙",
+        "🐙",
+        "🐙 ",
+    ];
 
     #[must_use]
     pub fn new() -> Self {
@@ -90,7 +99,7 @@ impl Spinner {
             MoveToColumn(0),
             Clear(ClearType::CurrentLine),
             SetForegroundColor(theme.spinner_done),
-            Print(format!("✔ {label}\n")),
+            Print(format!("🐙 {label}\n")),
             ResetColor
         )?;
         out.flush()
@@ -108,7 +117,7 @@ impl Spinner {
             MoveToColumn(0),
             Clear(ClearType::CurrentLine),
             SetForegroundColor(theme.spinner_failed),
-            Print(format!("✘ {label}\n")),
+            Print(format!("🐙 {label}\n")),
             ResetColor
         )?;
         out.flush()

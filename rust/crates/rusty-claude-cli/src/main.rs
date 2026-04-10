@@ -3792,7 +3792,7 @@ impl LiveCli {
 ███████║██║     █████╗  \n\
 ██╔══██║██║     ██╔══╝  \n\
 ██║  ██║╚██████╗███████╗\n\
-╚═╝  ╚═╝ ╚═════╝╚══════╝\x1b[0m \x1b[38;5;208mCLI\x1b[0m 🚀\n\n\
+╚═╝  ╚═╝ ╚═════╝╚══════╝\x1b[0m \x1b[38;5;208mCLI\x1b[0m 🐙\n\n\
   \x1b[2mModel\x1b[0m            {}\n\
   \x1b[2mPermissions\x1b[0m      {}\n\
   \x1b[2mBranch\x1b[0m           {}\n\
@@ -3855,7 +3855,7 @@ impl LiveCli {
         let mut spinner = Spinner::new();
         let mut stdout = io::stdout();
         spinner.tick(
-            "🦀 Thinking...",
+            "🐙 Thinking...",
             TerminalRenderer::new().color_theme(),
             &mut stdout,
         )?;
