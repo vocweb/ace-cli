@@ -6,9 +6,11 @@
     clippy::unnecessary_wraps,
     clippy::unused_self
 )]
+mod hud;
 mod init;
 mod input;
 mod render;
+mod tui_input;
 
 use std::collections::BTreeSet;
 use std::env;
