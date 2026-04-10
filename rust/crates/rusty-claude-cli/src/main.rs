@@ -547,6 +547,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
             }
             "--tui" => {
                 tui_mode = true;
+                index += 1;
             }
             "--show-thinking" => {
                 show_thinking = true;
