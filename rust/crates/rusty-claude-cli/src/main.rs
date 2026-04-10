@@ -41,7 +41,7 @@ use commands::{
 use compat_harness::{extract_manifest, UpstreamPaths};
 use init::initialize_repo;
 use plugins::{PluginHooks, PluginManager, PluginManagerConfig, PluginRegistry};
-use render::{MarkdownStreamState, Spinner, TerminalRenderer};
+use render::{MarkdownStreamState, Spinner, TerminalRenderer, ThinkingDisplay};
 use runtime::{
     check_base_commit, clear_oauth_credentials, format_stale_base_warning, format_usd,
     generate_pkce_pair, generate_state, load_oauth_credentials, load_system_prompt,
@@ -261,6 +261,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             base_commit,
             reasoning_effort,
             allow_broad_cwd,
+            show_thinking,
         } => run_repl(
             model,
             allowed_tools,
@@ -268,6 +269,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             base_commit,
             reasoning_effort,
             allow_broad_cwd,
+            show_thinking,
         )?,
         CliAction::HelpTopic(topic) => print_help_topic(topic),
         CliAction::Help { output_format } => print_help(output_format)?,
@@ -359,6 +361,7 @@ enum CliAction {
         base_commit: Option<String>,
         reasoning_effort: Option<String>,
         allow_broad_cwd: bool,
+        show_thinking: bool,
     },
     HelpTopic(LocalHelpTopic),
     // prompt-mode formatting is only supported for non-interactive runs
@@ -404,6 +407,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
     let mut base_commit: Option<String> = None;
     let mut reasoning_effort: Option<String> = None;
     let mut allow_broad_cwd = false;
+    let mut show_thinking = false;
     let mut rest: Vec<String> = Vec::new();
     let mut index = 0;
 
@@ -520,6 +524,10 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
                 allow_broad_cwd = true;
                 index += 1;
             }
+            "--show-thinking" => {
+                show_thinking = true;
+                index += 1;
+            }
             "-p" => {
                 // ACE CLI compat: -p "prompt" = one-shot prompt
                 let prompt = args[index + 1..].join(" ");
@@ -619,6 +627,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
             base_commit,
             reasoning_effort: reasoning_effort.clone(),
             allow_broad_cwd,
+            show_thinking,
         });
     }
     if rest.first().map(String::as_str) == Some("--resume") {
@@ -3050,7 +3059,8 @@ fn run_resume_command(
         | SlashCommand::Team { .. }
         | SlashCommand::Cron { .. }
         | SlashCommand::Telemetry { .. }
-        | SlashCommand::Providers => Err("unsupported resumed slash command".into()),
+        | SlashCommand::Providers
+        | SlashCommand::Thinking => Err("unsupported resumed slash command".into()),
     }
 }
 
@@ -3153,12 +3163,16 @@ fn run_repl(
     base_commit: Option<String>,
     reasoning_effort: Option<String>,
     allow_broad_cwd: bool,
+    show_thinking: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     enforce_broad_cwd_policy(allow_broad_cwd, CliOutputFormat::Text)?;
     run_stale_base_preflight(base_commit.as_deref());
     let resolved_model = resolve_repl_model(model);
     let mut cli = LiveCli::new(resolved_model, true, allowed_tools, permission_mode)?;
     cli.set_reasoning_effort(reasoning_effort);
+    if show_thinking {
+        cli.set_show_thinking(true);
+    }
     let mut editor =
         input::LineEditor::new("> ", cli.repl_completion_candidates().unwrap_or_default());
     println!("{}", cli.startup_banner());
@@ -3248,6 +3262,7 @@ struct LiveCli {
     runtime: BuiltRuntime,
     session: SessionHandle,
     prompt_history: Vec<PromptHistoryEntry>,
+    show_thinking: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -3756,9 +3771,17 @@ impl LiveCli {
             runtime,
             session,
             prompt_history: Vec::new(),
+            show_thinking: false,
         };
         cli.persist_session()?;
         Ok(cli)
+    }
+
+    fn set_show_thinking(&mut self, enabled: bool) {
+        self.show_thinking = enabled;
+        if let Some(rt) = self.runtime.runtime.as_mut() {
+            rt.api_client_mut().set_show_thinking(enabled);
+        }
     }
 
     fn set_reasoning_effort(&mut self, effort: Option<String>) {
@@ -3847,6 +3870,12 @@ impl LiveCli {
     fn replace_runtime(&mut self, runtime: BuiltRuntime) -> Result<(), Box<dyn std::error::Error>> {
         self.runtime.shutdown_plugins()?;
         self.runtime = runtime;
+        // Propagate show_thinking to the new runtime client
+        if self.show_thinking {
+            if let Some(rt) = self.runtime.runtime.as_mut() {
+                rt.api_client_mut().set_show_thinking(true);
+            }
+        }
         Ok(())
     }
 
@@ -4141,6 +4170,15 @@ impl LiveCli {
             }
             SlashCommand::Context { action } => {
                 self.handle_context_command(action.as_deref());
+                false
+            }
+            SlashCommand::Thinking => {
+                let new_state = !self.show_thinking;
+                self.set_show_thinking(new_state);
+                eprintln!(
+                    "Thinking display: {}",
+                    if new_state { "on" } else { "off" }
+                );
                 false
             }
             // ── Still unimplemented stubs ────────────────────────
@@ -7275,6 +7313,7 @@ struct AnthropicRuntimeClient {
     tool_registry: GlobalToolRegistry,
     progress_reporter: Option<InternalPromptProgressReporter>,
     reasoning_effort: Option<String>,
+    show_thinking: bool,
 }
 
 impl AnthropicRuntimeClient {
@@ -7339,11 +7378,16 @@ impl AnthropicRuntimeClient {
             tool_registry,
             progress_reporter,
             reasoning_effort: None,
+            show_thinking: false,
         })
     }
 
     fn set_reasoning_effort(&mut self, effort: Option<String>) {
         self.reasoning_effort = effort;
+    }
+
+    fn set_show_thinking(&mut self, enabled: bool) {
+        self.show_thinking = enabled;
     }
 }
 
@@ -7454,6 +7498,8 @@ impl AnthropicRuntimeClient {
         let mut block_has_thinking_summary = false;
         let mut saw_stop = false;
         let mut received_any_event = false;
+        let mut thinking_display = ThinkingDisplay::new(7);
+        let mut in_thinking_block = false;
 
         loop {
             let next = if apply_stall_timeout && !received_any_event {
@@ -7492,14 +7538,21 @@ impl AnthropicRuntimeClient {
                     }
                 }
                 ApiStreamEvent::ContentBlockStart(start) => {
-                    push_output_block(
+                    in_thinking_block = matches!(
                         start.content_block,
-                        out,
-                        &mut events,
-                        &mut pending_tool,
-                        true,
-                        &mut block_has_thinking_summary,
-                    )?;
+                        OutputContentBlock::Thinking { .. }
+                            | OutputContentBlock::RedactedThinking { .. }
+                    );
+                    if !(in_thinking_block && self.show_thinking) {
+                        push_output_block(
+                            start.content_block,
+                            out,
+                            &mut events,
+                            &mut pending_tool,
+                            true,
+                            &mut block_has_thinking_summary,
+                        )?;
+                    }
                 }
                 ApiStreamEvent::ContentBlockDelta(delta) => match delta.delta {
                     ContentBlockDelta::TextDelta { text } => {
@@ -7520,8 +7573,12 @@ impl AnthropicRuntimeClient {
                             input.push_str(&partial_json);
                         }
                     }
-                    ContentBlockDelta::ThinkingDelta { .. } => {
-                        if !block_has_thinking_summary {
+                    ContentBlockDelta::ThinkingDelta { thinking } => {
+                        if self.show_thinking {
+                            thinking_display
+                                .push(&thinking, out)
+                                .map_err(|error| RuntimeError::new(error.to_string()))?;
+                        } else if !block_has_thinking_summary {
                             render_thinking_block_summary(out, None, false)?;
                             block_has_thinking_summary = true;
                         }
@@ -7529,6 +7586,12 @@ impl AnthropicRuntimeClient {
                     ContentBlockDelta::SignatureDelta { .. } => {}
                 },
                 ApiStreamEvent::ContentBlockStop(_) => {
+                    if in_thinking_block && self.show_thinking {
+                        thinking_display
+                            .finish(out)
+                            .map_err(|error| RuntimeError::new(error.to_string()))?;
+                    }
+                    in_thinking_block = false;
                     block_has_thinking_summary = false;
                     if let Some(rendered) = markdown_stream.flush(&renderer) {
                         write!(out, "{rendered}")
@@ -8783,6 +8846,10 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "  --allowedTools TOOLS       Restrict enabled tools (repeatable; comma-separated aliases supported)")?;
     writeln!(
         out,
+        "  --show-thinking            Show AI thinking process in a scrolling window"
+    )?;
+    writeln!(
+        out,
         "  --version, -V              Print version and build information locally"
     )?;
     writeln!(out)?;
@@ -9207,6 +9274,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                show_thinking: false,
             }
         );
     }
@@ -9616,6 +9684,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                show_thinking: false,
             }
         );
     }
@@ -9637,6 +9706,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                show_thinking: false,
             }
         );
     }
@@ -9694,6 +9764,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                show_thinking: false,
             }
         );
     }

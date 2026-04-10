@@ -913,6 +913,103 @@ fn strip_ansi(input: &str) -> String {
     output
 }
 
+/// Scrolling thinking display -- shows the last N lines of thinking text
+/// in dim grey, clearing and redrawing as new content arrives.
+///
+/// Uses raw ANSI escape codes so it works with `&mut dyn Write` (the
+/// crossterm `queue!` macro requires `Sized`).
+pub struct ThinkingDisplay {
+    lines: Vec<String>,
+    current_line: String,
+    max_visible_lines: usize,
+    rendered_line_count: usize,
+}
+
+/// ANSI: move cursor up one line.
+const ANSI_MOVE_UP: &str = "\x1b[1A";
+/// ANSI: clear the entire current line.
+const ANSI_CLEAR_LINE: &str = "\x1b[2K";
+/// ANSI: set foreground to dark grey (SGR 90).
+const ANSI_DIM_GREY: &str = "\x1b[90m";
+/// ANSI: reset all attributes.
+const ANSI_RESET: &str = "\x1b[0m";
+
+impl ThinkingDisplay {
+    pub fn new(max_visible_lines: usize) -> Self {
+        Self {
+            lines: Vec::new(),
+            current_line: String::new(),
+            max_visible_lines,
+            rendered_line_count: 0,
+        }
+    }
+
+    /// Push new thinking text delta. Splits by newlines, keeps track of lines.
+    pub fn push(&mut self, text: &str, out: &mut (dyn Write + '_)) -> io::Result<()> {
+        for ch in text.chars() {
+            if ch == '\n' {
+                self.lines.push(std::mem::take(&mut self.current_line));
+            } else {
+                self.current_line.push(ch);
+            }
+        }
+        self.redraw(out)
+    }
+
+    fn redraw(&mut self, out: &mut (dyn Write + '_)) -> io::Result<()> {
+        // Move cursor up to clear previous thinking lines
+        for _ in 0..self.rendered_line_count {
+            write!(out, "{ANSI_MOVE_UP}{ANSI_CLEAR_LINE}")?;
+        }
+
+        // Collect visible lines (last max_visible_lines)
+        let mut visible: Vec<&str> = Vec::new();
+        let start = self.lines.len().saturating_sub(self.max_visible_lines);
+        for line in &self.lines[start..] {
+            visible.push(line);
+        }
+        // Add current partial line if we have room
+        if visible.len() < self.max_visible_lines && !self.current_line.is_empty() {
+            visible.push(&self.current_line);
+        }
+
+        // Render each visible line in dim grey
+        let line_count = visible.len();
+        for (i, line) in visible.iter().enumerate() {
+            // Truncate long lines to avoid wrapping issues
+            let display_line = if line.len() > 120 {
+                &line[..117]
+            } else {
+                line
+            };
+            write!(out, "{ANSI_DIM_GREY}{display_line}{ANSI_RESET}")?;
+            if i < line_count - 1 {
+                write!(out, "\n")?;
+            }
+        }
+        if line_count > 0 {
+            write!(out, "\n")?;
+        }
+        out.flush()?;
+        self.rendered_line_count = line_count;
+        Ok(())
+    }
+
+    /// Clear the thinking display area and reset state.
+    pub fn finish(&mut self, out: &mut (dyn Write + '_)) -> io::Result<()> {
+        if self.rendered_line_count > 0 {
+            for _ in 0..self.rendered_line_count {
+                write!(out, "{ANSI_MOVE_UP}{ANSI_CLEAR_LINE}")?;
+            }
+            out.flush()?;
+        }
+        self.lines.clear();
+        self.current_line.clear();
+        self.rendered_line_count = 0;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{strip_ansi, MarkdownStreamState, Spinner, TerminalRenderer};

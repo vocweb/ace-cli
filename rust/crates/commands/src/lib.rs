@@ -1048,6 +1048,13 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         argument_hint: None,
         resume_supported: true,
     },
+    SlashCommandSpec {
+        name: "thinking",
+        aliases: &[],
+        summary: "Toggle display of AI thinking process",
+        argument_hint: None,
+        resume_supported: true,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1203,6 +1210,7 @@ pub enum SlashCommand {
     History {
         count: Option<String>,
     },
+    Thinking,
     Unknown(String),
 }
 
@@ -1301,6 +1309,7 @@ impl SlashCommand {
             Self::Tag { .. } => "/tag",
             Self::OutputStyle { .. } => "/output-style",
             Self::AddDir { .. } => "/add-dir",
+            Self::Thinking => "/thinking",
             Self::Unknown(_) => "/unknown",
             Self::Sandbox => "/sandbox",
             Self::Mcp { .. } => "/mcp",
@@ -1524,6 +1533,10 @@ pub fn validate_slash_command_input(
         "history" => SlashCommand::History {
             count: optional_single_arg(command, &args, "[count]")?,
         },
+        "thinking" => {
+            validate_no_args(command, &args)?;
+            SlashCommand::Thinking
+        }
         other => SlashCommand::Unknown(other.to_string()),
     }))
 }
@@ -4107,6 +4120,7 @@ pub fn handle_slash_command(
         | SlashCommand::Cron { .. }
         | SlashCommand::Telemetry { .. }
         | SlashCommand::Providers
+        | SlashCommand::Thinking
         | SlashCommand::Unknown(_) => None,
     }
 }
@@ -4613,7 +4627,7 @@ mod tests {
         assert!(help.contains("/agents [list|help]"));
         assert!(help.contains("/skills [list|install <path>|help|<skill> [args]]"));
         assert!(help.contains("aliases: /skill"));
-        assert_eq!(slash_command_specs().len(), 141);
+        assert_eq!(slash_command_specs().len(), 142);
         assert!(resume_supported_slash_commands().len() >= 39);
     }
 
