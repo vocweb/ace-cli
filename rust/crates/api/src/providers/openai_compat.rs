@@ -97,7 +97,7 @@ impl OpenAiCompatConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OpenAiCompatClient {
     http: reqwest::Client,
     api_key: String,
@@ -106,6 +106,16 @@ pub struct OpenAiCompatClient {
     max_retries: u32,
     initial_backoff: Duration,
     max_backoff: Duration,
+}
+
+impl std::fmt::Debug for OpenAiCompatClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenAiCompatClient")
+            .field("api_key", &"[REDACTED]")
+            .field("config", &self.config)
+            .field("base_url", &self.base_url)
+            .finish()
+    }
 }
 
 impl OpenAiCompatClient {
@@ -176,7 +186,7 @@ impl OpenAiCompatClient {
         preflight_message_request(&request)?;
         let response = self.send_with_retry(&request).await?;
         let request_id = request_id_from_headers(response.headers());
-        let body = response.text().await.map_err(ApiError::from)?;
+        let body = response.text().await.map_err(|e| ApiError::from(e.without_url()))?;
         // Some backends return {"error":{"message":"...","type":"...","code":...}}
         // instead of a valid completion object. Check for this before attempting
         // full deserialization so the user sees the actual error, not a cryptic
@@ -277,7 +287,7 @@ impl OpenAiCompatClient {
             .json(&build_chat_completion_request(request, self.config()))
             .send()
             .await
-            .map_err(ApiError::from)
+            .map_err(|e| ApiError::from(e.without_url()))
     }
 
     fn backoff_for_attempt(&self, attempt: u32) -> Result<Duration, ApiError> {
@@ -388,7 +398,7 @@ impl MessageStream {
                 return Ok(None);
             }
 
-            match self.response.chunk().await? {
+            match self.response.chunk().await.map_err(|e| ApiError::from(e.without_url()))? {
                 Some(chunk) => {
                     for parsed in self.parser.push(&chunk)? {
                         self.pending.extend(self.state.ingest_chunk(parsed)?);

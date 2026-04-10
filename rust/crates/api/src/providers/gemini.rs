@@ -21,7 +21,7 @@ const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const DEFAULT_MAX_BACKOFF: Duration = Duration::from_secs(128);
 const DEFAULT_MAX_RETRIES: u32 = 8;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GeminiClient {
     http: reqwest::Client,
     api_key: String,
@@ -29,6 +29,15 @@ pub struct GeminiClient {
     max_retries: u32,
     initial_backoff: Duration,
     max_backoff: Duration,
+}
+
+impl std::fmt::Debug for GeminiClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GeminiClient")
+            .field("api_key", &"[REDACTED]")
+            .field("base_url", &self.base_url)
+            .finish()
+    }
 }
 
 impl GeminiClient {
@@ -71,7 +80,7 @@ impl GeminiClient {
         preflight_message_request(&request)?;
         let response = self.send_with_retry(&request, false).await?;
         let request_id = request_id_from_headers(response.headers());
-        let body = response.text().await.map_err(ApiError::from)?;
+        let body = response.text().await.map_err(|e| ApiError::from(e.without_url()))?;
         let payload: Value = serde_json::from_str(&body).map_err(|error| {
             ApiError::json_deserialize("Gemini", &request.model, &body, error)
         })?;
@@ -147,23 +156,21 @@ impl GeminiClient {
         self.http
             .post(&url)
             .header("content-type", "application/json")
+            .header("x-goog-api-key", &self.api_key)
             .json(&body)
             .send()
             .await
-            .map_err(ApiError::from)
+            .map_err(|e| ApiError::from(e.without_url()))
     }
 
     fn generate_endpoint(&self, model: &str) -> String {
         let trimmed = self.base_url.trim_end_matches('/');
-        format!("{trimmed}/v1beta/models/{model}:generateContent?key={}", self.api_key)
+        format!("{trimmed}/v1beta/models/{model}:generateContent")
     }
 
     fn stream_endpoint(&self, model: &str) -> String {
         let trimmed = self.base_url.trim_end_matches('/');
-        format!(
-            "{trimmed}/v1beta/models/{model}:streamGenerateContent?key={}&alt=sse",
-            self.api_key
-        )
+        format!("{trimmed}/v1beta/models/{model}:streamGenerateContent?alt=sse")
     }
 
     fn backoff_for_attempt(&self, attempt: u32) -> Result<Duration, ApiError> {
@@ -512,7 +519,7 @@ impl GeminiMessageStream {
                 return Ok(None);
             }
 
-            match self.response.chunk().await? {
+            match self.response.chunk().await.map_err(|e| ApiError::from(e.without_url()))? {
                 Some(chunk) => {
                     for parsed in self.parser.push(&chunk)? {
                         self.pending.extend(self.state.ingest_chunk(parsed)?);
@@ -1015,7 +1022,7 @@ mod tests {
         );
         let url = client.generate_endpoint("gemini-2.5-pro-preview-05-06");
         assert!(url.contains("/v1beta/models/gemini-2.5-pro-preview-05-06:generateContent"));
-        assert!(url.contains("key=test-key"));
+        assert!(!url.contains("key="), "API key must not appear in URL");
     }
 
     #[test]
@@ -1026,7 +1033,18 @@ mod tests {
         );
         let url = client.stream_endpoint("gemini-2.5-pro-preview-05-06");
         assert!(url.contains("/v1beta/models/gemini-2.5-pro-preview-05-06:streamGenerateContent"));
-        assert!(url.contains("key=test-key"));
+        assert!(!url.contains("key=test-key"), "API key must not appear in URL");
         assert!(url.contains("alt=sse"));
+    }
+
+    #[test]
+    fn debug_impl_redacts_api_key() {
+        let client = GeminiClient::new(
+            "super-secret-key".to_string(),
+            "https://generativelanguage.googleapis.com".to_string(),
+        );
+        let debug_output = format!("{:?}", client);
+        assert!(debug_output.contains("[REDACTED]"));
+        assert!(!debug_output.contains("super-secret-key"), "API key must be redacted in Debug output");
     }
 }
