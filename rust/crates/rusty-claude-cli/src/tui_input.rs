@@ -254,6 +254,24 @@ impl TuiInput {
         }
     }
 
+    // -- Cursor position helpers for rendering --
+
+    /// Returns the number of characters after the last newline before the cursor.
+    /// Used for calculating the cursor X position in the terminal.
+    pub fn visible_cursor_x(&self) -> usize {
+        let before_cursor = &self.buffer[..self.cursor];
+        match before_cursor.rfind('\n') {
+            Some(pos) => before_cursor[pos + 1..].chars().count(),
+            None => before_cursor.chars().count(),
+        }
+    }
+
+    /// Returns the number of newlines before the cursor.
+    /// Used for calculating the cursor Y position in the terminal.
+    pub fn visible_cursor_y(&self) -> usize {
+        self.buffer[..self.cursor].matches('\n').count()
+    }
+
     // -- Char boundary helpers (UTF-8 safety) --
 
     fn prev_char_boundary(&self, pos: usize) -> usize {
