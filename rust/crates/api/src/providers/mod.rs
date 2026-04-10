@@ -259,6 +259,13 @@ pub fn detect_provider_kind(model: &str) -> ProviderKind {
     if gemini::has_api_key() {
         return ProviderKind::Gemini;
     }
+    // When OLLAMA_BASE_URL is explicitly configured and no other provider
+    // matched, assume the model is served by the local Ollama instance.
+    // This lets users type `--model gemma4` instead of `--model ollama/gemma4`
+    // when they have set OLLAMA_BASE_URL in their environment.
+    if env_or_dotenv_present("OLLAMA_BASE_URL") {
+        return ProviderKind::Ollama;
+    }
     ProviderKind::Anthropic
 }
 
@@ -1023,6 +1030,80 @@ NO_EQUALS_LINE
         assert!(
             rendered.contains(" — hint: I see OPENAI_API_KEY is set"),
             "rendered error should carry the env-driven hint: {rendered}"
+        );
+    }
+
+    #[test]
+    fn bare_model_routes_to_ollama_when_ollama_base_url_is_set_and_no_anthropic_auth() {
+        // given — no known provider credentials, but OLLAMA_BASE_URL is configured.
+        // Note: has_auth_from_env_or_saved() also checks for saved OAuth tokens
+        // on disk, so this test can only assert Ollama routing on machines
+        // without a persisted Anthropic OAuth credential file.
+        let _lock = env_lock();
+        let _anthropic = EnvVarGuard::set("ANTHROPIC_API_KEY", None);
+        let _anthropic_auth = EnvVarGuard::set("ANTHROPIC_AUTH_TOKEN", None);
+        let _openai = EnvVarGuard::set("OPENAI_API_KEY", None);
+        let _xai = EnvVarGuard::set("XAI_API_KEY", None);
+        let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", None);
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", None);
+        let _ollama = EnvVarGuard::set("OLLAMA_BASE_URL", Some("http://localhost:11434"));
+
+        // when
+        let kind = detect_provider_kind("gemma4");
+
+        // If there is a saved Anthropic OAuth token on disk, Anthropic wins
+        // (the user should use the explicit `ollama/` prefix in that case).
+        // Otherwise, OLLAMA_BASE_URL must route to Ollama.
+        let has_saved_anthropic_auth =
+            super::anthropic::has_auth_from_env_or_saved().unwrap_or(false);
+        if has_saved_anthropic_auth {
+            assert_eq!(
+                kind,
+                ProviderKind::Anthropic,
+                "saved Anthropic auth should take precedence over OLLAMA_BASE_URL"
+            );
+        } else {
+            assert_eq!(
+                kind,
+                ProviderKind::Ollama,
+                "bare model name should route to Ollama when OLLAMA_BASE_URL is set and no Anthropic auth is available"
+            );
+        }
+    }
+
+    #[test]
+    fn bare_model_does_not_route_to_ollama_when_ollama_base_url_is_absent() {
+        // given — no OLLAMA_BASE_URL, no other provider credentials either
+        let _lock = env_lock();
+        let _anthropic = EnvVarGuard::set("ANTHROPIC_API_KEY", None);
+        let _anthropic_auth = EnvVarGuard::set("ANTHROPIC_AUTH_TOKEN", None);
+        let _openai = EnvVarGuard::set("OPENAI_API_KEY", None);
+        let _xai = EnvVarGuard::set("XAI_API_KEY", None);
+        let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", None);
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", None);
+        let _ollama = EnvVarGuard::set("OLLAMA_BASE_URL", None);
+
+        // when
+        let kind = detect_provider_kind("gemma4");
+
+        // then — without OLLAMA_BASE_URL, must NOT route to Ollama.
+        // Falls to Anthropic if a saved OAuth token exists, or as the
+        // historical default.
+        assert_ne!(
+            kind,
+            ProviderKind::Ollama,
+            "bare model name should NOT route to Ollama when OLLAMA_BASE_URL is absent"
+        );
+    }
+
+    #[test]
+    fn ollama_prefix_still_routes_to_ollama_regardless_of_env() {
+        // The explicit ollama/ prefix must always route correctly
+        let kind = detect_provider_kind("ollama/llama3");
+        assert_eq!(
+            kind,
+            ProviderKind::Ollama,
+            "ollama/ prefix must always route to Ollama"
         );
     }
 
