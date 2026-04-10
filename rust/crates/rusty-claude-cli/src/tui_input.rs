@@ -28,6 +28,12 @@ pub struct TuiInput {
     pub history_index: Option<usize>,
     /// Saved buffer when browsing history
     pub saved_buffer: Option<String>,
+    /// Completion candidates (e.g. slash commands)
+    pub completions: Vec<String>,
+    /// Index into filtered completions for cycling with Tab
+    completion_index: Option<usize>,
+    /// The original prefix that started the completion cycle
+    completion_prefix: Option<String>,
 }
 
 impl TuiInput {
@@ -39,7 +45,15 @@ impl TuiInput {
             history: Vec::new(),
             history_index: None,
             saved_buffer: None,
+            completions: Vec::new(),
+            completion_index: None,
+            completion_prefix: None,
         }
+    }
+
+    /// Set the available completion candidates.
+    pub fn set_completions(&mut self, candidates: Vec<String>) {
+        self.completions = candidates;
     }
 
     /// Process a key event and return the resulting action.
@@ -95,6 +109,8 @@ impl TuiInput {
                 self.buffer.insert(self.cursor, c);
                 self.cursor += c.len_utf8();
                 self.mode = InputMode::Typing;
+                self.completion_index = None;
+                self.completion_prefix = None;
                 InputAction::Changed
             }
 
@@ -105,6 +121,7 @@ impl TuiInput {
                     self.buffer.drain(prev..self.cursor);
                     self.cursor = prev;
                     self.mode = InputMode::Typing;
+                    self.completion_index = None;
                     InputAction::Changed
                 } else {
                     InputAction::None
@@ -161,6 +178,18 @@ impl TuiInput {
             KeyCode::End => {
                 self.cursor = self.buffer.len();
                 InputAction::None
+            }
+
+            // Tab -> cycle through completions
+            KeyCode::Tab if self.buffer.starts_with('/') => {
+                self.complete_next();
+                InputAction::Changed
+            }
+
+            // BackTab (Shift+Tab) -> cycle backwards
+            KeyCode::BackTab if self.buffer.starts_with('/') => {
+                self.complete_prev();
+                InputAction::Changed
             }
 
             _ => InputAction::None,
@@ -254,6 +283,57 @@ impl TuiInput {
             }
             None => {} // Not browsing history
         }
+    }
+
+    // -- Tab completion --
+
+    fn complete_next(&mut self) {
+        // Save the original prefix on first Tab press
+        let prefix = self
+            .completion_prefix
+            .clone()
+            .unwrap_or_else(|| self.buffer.clone());
+        let matches: Vec<String> = self
+            .completions
+            .iter()
+            .filter(|c| c.starts_with(&prefix) && *c != &prefix)
+            .cloned()
+            .collect();
+        if matches.is_empty() {
+            return;
+        }
+        self.completion_prefix = Some(prefix);
+        let idx = match self.completion_index {
+            Some(i) => (i + 1) % matches.len(),
+            None => 0,
+        };
+        self.completion_index = Some(idx);
+        self.buffer = matches[idx].clone();
+        self.cursor = self.buffer.len();
+    }
+
+    fn complete_prev(&mut self) {
+        let prefix = self
+            .completion_prefix
+            .clone()
+            .unwrap_or_else(|| self.buffer.clone());
+        let matches: Vec<String> = self
+            .completions
+            .iter()
+            .filter(|c| c.starts_with(&prefix) && *c != &prefix)
+            .cloned()
+            .collect();
+        if matches.is_empty() {
+            return;
+        }
+        self.completion_prefix = Some(prefix);
+        let idx = match self.completion_index {
+            Some(0) | None => matches.len() - 1,
+            Some(i) => i - 1,
+        };
+        self.completion_index = Some(idx);
+        self.buffer = matches[idx].clone();
+        self.cursor = self.buffer.len();
     }
 
     // -- Cursor position helpers for rendering --

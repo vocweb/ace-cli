@@ -3305,6 +3305,11 @@ fn run_tui_repl(
     let mut app = tui_app::TuiApp::new(cli.model.clone(), cwd);
     app.hud.refresh_git();
 
+    // Provide slash-command completions for Tab
+    if let Ok(candidates) = cli.repl_completion_candidates() {
+        app.input.set_completions(candidates);
+    }
+
     // Push startup banner into Zone 1
     app.push_text(
         format!("🐙 ACE CLI — {}", cli.model),
@@ -3377,23 +3382,57 @@ fn run_tui_repl(
                             if !handled {
                                 // Run the turn (streams to stdout normally)
                                 app.hud.start_turn();
+                                let msg_count_before = cli.runtime.session().messages.len();
                                 cli.record_prompt_history(&trimmed);
                                 match cli.run_turn(&trimmed) {
                                     Ok(()) => {
                                         // Update HUD after turn
                                         app.hud.turn_start = None;
                                         app.hud.refresh_git();
-                                        // Token usage is tracked inside runtime;
-                                        // extract cumulative usage
                                         if let Some(usage) = cli.cumulative_token_usage() {
                                             let total = u64::from(usage.input_tokens)
                                                 + u64::from(usage.output_tokens);
                                             app.hud.update_tokens(total, app.hud.tokens_max);
                                         }
-                                        app.push_text(
-                                            "✨ Done".to_string(),
-                                            RStyle::default().fg(RColor::Green),
-                                        );
+
+                                        // Extract new messages from session and
+                                        // render them into Zone 1 so they persist
+                                        // across the alternate-screen swap.
+                                        let renderer = TerminalRenderer::new();
+                                        let messages = &cli.runtime.session().messages;
+                                        for msg in messages.iter().skip(msg_count_before) {
+                                            for block in &msg.blocks {
+                                                match block {
+                                                    ContentBlock::Text { text } => {
+                                                        let lines =
+                                                            renderer.render_markdown_to_lines(text);
+                                                        app.push_content(lines);
+                                                    }
+                                                    ContentBlock::ToolUse {
+                                                        name, input, ..
+                                                    } => {
+                                                        let lines =
+                                                            TerminalRenderer::format_tool_start_lines(
+                                                                name, input,
+                                                            );
+                                                        app.push_content(lines);
+                                                    }
+                                                    ContentBlock::ToolResult {
+                                                        tool_name,
+                                                        output,
+                                                        is_error,
+                                                        ..
+                                                    } => {
+                                                        let lines =
+                                                            TerminalRenderer::format_tool_result_lines(
+                                                                tool_name, output, *is_error,
+                                                            );
+                                                        app.push_content(lines);
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         app.push_text(String::new(), RStyle::default());
                                     }
                                     Err(error) => {
@@ -3403,6 +3442,11 @@ fn run_tui_repl(
                                         );
                                     }
                                 }
+                            }
+
+                            // Refresh completions after turn
+                            if let Ok(candidates) = cli.repl_completion_candidates() {
+                                app.input.set_completions(candidates);
                             }
 
                             // --- Re-enter TUI ---
