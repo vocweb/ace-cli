@@ -1,6 +1,6 @@
-# 🦞 Claw Code — Rust Implementation
+# ACE CLI — Rust Implementation
 
-A high-performance Rust rewrite of the Claw Code CLI agent harness. Built for speed, safety, and native tool execution.
+A high-performance Rust implementation of the ACE CLI agent harness. Built for speed, safety, and native tool execution.
 
 For a task-oriented guide with copy/paste examples, see [`../USAGE.md`](../USAGE.md).
 
@@ -118,7 +118,7 @@ Short names resolve to the latest model versions:
 Representative current surface:
 
 ```text
-claw [OPTIONS] [COMMAND]
+ace [OPTIONS] [COMMAND]
 
 Flags:
   --model MODEL
@@ -164,7 +164,7 @@ The REPL now exposes a much broader surface than the original minimal shell:
 - automation / analysis: `/review`, `/advisor`, `/insights`, `/security-review`, `/subagent`, `/team`, `/telemetry`, `/providers`, `/cron`, and more
 - plugin management: `/plugin` (with aliases `/plugins`, `/marketplace`)
 
-Notable claw-first surfaces now available directly in slash form:
+Notable agent-first surfaces now available directly in slash form:
 - `/skills [list|install <path>|help]`
 - `/agents [list|help]`
 - `/mcp [list|show <server>|help]`
@@ -187,7 +187,7 @@ rust/
     ├── mock-anthropic-service/ # Deterministic local Anthropic-compatible mock
     ├── plugins/            # Plugin metadata, manager, install/enable/disable surfaces
     ├── runtime/            # Session, config, permissions, MCP, prompts, auth/runtime loop
-    ├── rusty-claude-cli/   # Main CLI binary (`claw`)
+    ├── rusty-claude-cli/   # Main CLI binary (`ace`)
     ├── telemetry/          # Session tracing and usage telemetry types
     └── tools/              # Built-in tools, skill resolution, tool search, agent runtime surfaces
 ```
@@ -208,7 +208,7 @@ rust/
 
 - **~20K lines** of Rust
 - **9 crates** in workspace
-- **Binary name:** `claw`
+- **Binary name:** `ace`
 - **Default model:** `claude-opus-4-6`
 - **Default permissions:** `danger-full-access`
 

@@ -230,7 +230,7 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
     SlashCommandSpec {
         name: "plugin",
         aliases: &["plugins", "marketplace"],
-        summary: "Manage Claw Code plugins",
+        summary: "Manage ACE plugins",
         argument_hint: Some(
             "[list|install <path>|enable <name>|disable <name>|uninstall <id>|update <id>]",
         ),
@@ -1136,6 +1136,16 @@ pub enum SlashCommand {
     SecurityReview,
     Keybindings,
     PrivacySettings,
+    Team {
+        args: Option<String>,
+    },
+    Cron {
+        args: Option<String>,
+    },
+    Telemetry {
+        action: Option<String>,
+    },
+    Providers,
     Plan {
         mode: Option<String>,
     },
@@ -1407,6 +1417,13 @@ pub fn validate_slash_command_input(
         "privacy-settings" => {
             validate_no_args(command, &args)?;
             SlashCommand::PrivacySettings
+        }
+        "team" => SlashCommand::Team { args: remainder },
+        "cron" => SlashCommand::Cron { args: remainder },
+        "telemetry" => SlashCommand::Telemetry { action: remainder },
+        "providers" => {
+            validate_no_args(command, &args)?;
+            SlashCommand::Providers
         }
         "plan" => SlashCommand::Plan { mode: remainder },
         "review" => SlashCommand::Review { scope: remainder },
@@ -2913,7 +2930,7 @@ fn default_skill_install_root() -> std::io::Result<PathBuf> {
     }
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        "unable to resolve a skills install root; set CLAW_CONFIG_HOME or HOME",
+        "unable to resolve a skills install root; set CLAW_CONFIG_HOME or HOME (CLAW_CONFIG_HOME is the legacy env var for the ACE config home)",
     ))
 }
 
@@ -3604,7 +3621,7 @@ fn render_agents_usage(unexpected: Option<&str>) -> String {
     let mut lines = vec![
         "Agents".to_string(),
         "  Usage            /agents [list|help]".to_string(),
-        "  Direct CLI       claw agents".to_string(),
+        "  Direct CLI       ace agents".to_string(),
         "  Sources          .claw/agents, ~/.claw/agents, $CLAW_CONFIG_HOME/agents".to_string(),
     ];
     if let Some(args) = unexpected {
@@ -3619,7 +3636,7 @@ fn render_agents_usage_json(unexpected: Option<&str>) -> Value {
         "action": "help",
         "usage": {
             "slash_command": "/agents [list|help]",
-            "direct_cli": "claw agents [list|help]",
+            "direct_cli": "ace agents [list|help]",
             "sources": [".claw/agents", "~/.claw/agents", "$CLAW_CONFIG_HOME/agents"],
         },
         "unexpected": unexpected,
@@ -3631,7 +3648,7 @@ fn render_skills_usage(unexpected: Option<&str>) -> String {
         "Skills".to_string(),
         "  Usage            /skills [list|install <path>|help|<skill> [args]]".to_string(),
         "  Alias            /skill".to_string(),
-        "  Direct CLI       claw skills [list|install <path>|help|<skill> [args]]".to_string(),
+        "  Direct CLI       ace skills [list|install <path>|help|<skill> [args]]".to_string(),
         "  Invoke           /skills help overview -> $help overview".to_string(),
         "  Install root     $CLAW_CONFIG_HOME/skills or ~/.claw/skills".to_string(),
         "  Sources          .claw/skills, .omc/skills, .agents/skills, .codex/skills, .claude/skills, ~/.claw/skills, ~/.omc/skills, ~/.claude/skills/omc-learned, ~/.codex/skills, ~/.claude/skills, legacy /commands".to_string(),
@@ -3649,7 +3666,7 @@ fn render_skills_usage_json(unexpected: Option<&str>) -> Value {
         "usage": {
             "slash_command": "/skills [list|install <path>|help|<skill> [args]]",
             "aliases": ["/skill"],
-            "direct_cli": "claw skills [list|install <path>|help|<skill> [args]]",
+            "direct_cli": "ace skills [list|install <path>|help|<skill> [args]]",
             "invoke": "/skills help overview -> $help overview",
             "install_root": "$CLAW_CONFIG_HOME/skills or ~/.claw/skills",
             "sources": [
@@ -3675,7 +3692,7 @@ fn render_mcp_usage(unexpected: Option<&str>) -> String {
     let mut lines = vec![
         "MCP".to_string(),
         "  Usage            /mcp [list|show <server>|help]".to_string(),
-        "  Direct CLI       claw mcp [list|show <server>|help]".to_string(),
+        "  Direct CLI       ace mcp [list|show <server>|help]".to_string(),
         "  Sources          .claw/settings.json, .claw/settings.local.json".to_string(),
     ];
     if let Some(args) = unexpected {
@@ -3690,7 +3707,7 @@ fn render_mcp_usage_json(unexpected: Option<&str>) -> Value {
         "action": "help",
         "usage": {
             "slash_command": "/mcp [list|show <server>|help]",
-            "direct_cli": "claw mcp [list|show <server>|help]",
+            "direct_cli": "ace mcp [list|show <server>|help]",
             "sources": [".claw/settings.json", ".claw/settings.local.json"],
         },
         "unexpected": unexpected,
@@ -4008,6 +4025,10 @@ pub fn handle_slash_command(
         | SlashCommand::OutputStyle { .. }
         | SlashCommand::AddDir { .. }
         | SlashCommand::History { .. }
+        | SlashCommand::Team { .. }
+        | SlashCommand::Cron { .. }
+        | SlashCommand::Telemetry { .. }
+        | SlashCommand::Providers
         | SlashCommand::Unknown(_) => None,
     }
 }
@@ -4575,7 +4596,7 @@ mod tests {
 
         // then
         assert!(help.contains("/plugin"));
-        assert!(help.contains("Summary          Manage Claw Code plugins"));
+        assert!(help.contains("Summary          Manage ACE plugins"));
         assert!(help.contains("Aliases          /plugins, /marketplace"));
         assert!(help.contains("Category         Tools"));
     }
@@ -4868,7 +4889,7 @@ mod tests {
         let help = handle_agents_slash_command_json(Some("help"), &workspace).expect("agents help");
         assert_eq!(help["kind"], "agents");
         assert_eq!(help["action"], "help");
-        assert_eq!(help["usage"]["direct_cli"], "claw agents [list|help]");
+        assert_eq!(help["usage"]["direct_cli"], "ace agents [list|help]");
 
         let unexpected = handle_agents_slash_command_json(Some("show planner"), &workspace)
             .expect("agents usage");
@@ -4993,7 +5014,7 @@ mod tests {
         assert_eq!(help["usage"]["aliases"][0], "/skill");
         assert_eq!(
             help["usage"]["direct_cli"],
-            "claw skills [list|install <path>|help|<skill> [args]]"
+            "ace skills [list|install <path>|help|<skill> [args]]"
         );
 
         let _ = fs::remove_dir_all(workspace);
@@ -5007,7 +5028,7 @@ mod tests {
         let agents_help =
             super::handle_agents_slash_command(Some("help"), &cwd).expect("agents help");
         assert!(agents_help.contains("Usage            /agents [list|help]"));
-        assert!(agents_help.contains("Direct CLI       claw agents"));
+        assert!(agents_help.contains("Direct CLI       ace agents"));
         assert!(agents_help
             .contains("Sources          .claw/agents, ~/.claw/agents, $CLAW_CONFIG_HOME/agents"));
 
@@ -5131,7 +5152,7 @@ mod tests {
 
         let help = super::handle_mcp_slash_command(Some("help"), &cwd).expect("mcp help");
         assert!(help.contains("Usage            /mcp [list|show <server>|help]"));
-        assert!(help.contains("Direct CLI       claw mcp [list|show <server>|help]"));
+        assert!(help.contains("Direct CLI       ace mcp [list|show <server>|help]"));
 
         let unexpected =
             super::handle_mcp_slash_command(Some("show alpha beta"), &cwd).expect("mcp usage");

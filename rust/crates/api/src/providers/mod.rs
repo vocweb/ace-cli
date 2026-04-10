@@ -8,6 +8,7 @@ use crate::error::ApiError;
 use crate::types::{MessageRequest, MessageResponse};
 
 pub mod anthropic;
+pub mod gemini;
 pub mod openai_compat;
 
 #[allow(dead_code)]
@@ -33,6 +34,8 @@ pub enum ProviderKind {
     Anthropic,
     Xai,
     OpenAi,
+    Gemini,
+    Ollama,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +125,24 @@ const MODEL_REGISTRY: &[(&str, ProviderMetadata)] = &[
             default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
         },
     ),
+    (
+        "gemini-pro",
+        ProviderMetadata {
+            provider: ProviderKind::Gemini,
+            auth_env: "GEMINI_API_KEY",
+            base_url_env: "GEMINI_BASE_URL",
+            default_base_url: gemini::DEFAULT_BASE_URL,
+        },
+    ),
+    (
+        "gemini-flash",
+        ProviderMetadata {
+            provider: ProviderKind::Gemini,
+            auth_env: "GEMINI_API_KEY",
+            base_url_env: "GEMINI_BASE_URL",
+            default_base_url: gemini::DEFAULT_BASE_URL,
+        },
+    ),
 ];
 
 #[must_use]
@@ -144,7 +165,12 @@ pub fn resolve_model_alias(model: &str) -> String {
                     "grok-2" => "grok-2",
                     _ => trimmed,
                 },
-                ProviderKind::OpenAi => trimmed,
+                ProviderKind::Gemini => match *alias {
+                    "gemini-pro" => "gemini-2.5-pro-preview-05-06",
+                    "gemini-flash" => "gemini-2.5-flash-preview-04-17",
+                    _ => trimmed,
+                },
+                ProviderKind::OpenAi | ProviderKind::Ollama => trimmed,
             })
         })
         .map_or_else(|| trimmed.to_string(), ToOwned::to_owned)
@@ -194,6 +220,25 @@ pub fn metadata_for_model(model: &str) -> Option<ProviderMetadata> {
             default_base_url: openai_compat::DEFAULT_DASHSCOPE_BASE_URL,
         });
     }
+    // Google Gemini models — native REST API with its own wire format.
+    if canonical.starts_with("gemini") {
+        return Some(ProviderMetadata {
+            provider: ProviderKind::Gemini,
+            auth_env: "GEMINI_API_KEY",
+            base_url_env: "GEMINI_BASE_URL",
+            default_base_url: gemini::DEFAULT_BASE_URL,
+        });
+    }
+    // Ollama local models — OpenAI-compat wire format, no auth required.
+    // Routing prefix: "ollama/<model>" (e.g. "ollama/llama3").
+    if canonical.starts_with("ollama/") {
+        return Some(ProviderMetadata {
+            provider: ProviderKind::Ollama,
+            auth_env: "",
+            base_url_env: "OLLAMA_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OLLAMA_BASE_URL,
+        });
+    }
     None
 }
 
@@ -210,6 +255,9 @@ pub fn detect_provider_kind(model: &str) -> ProviderKind {
     }
     if openai_compat::has_api_key("XAI_API_KEY") {
         return ProviderKind::Xai;
+    }
+    if gemini::has_api_key() {
+        return ProviderKind::Gemini;
     }
     ProviderKind::Anthropic
 }
@@ -253,6 +301,12 @@ pub fn model_token_limit(model: &str) -> Option<ModelTokenLimit> {
             max_output_tokens: 64_000,
             context_window_tokens: 131_072,
         }),
+        "gemini-2.5-pro-preview-05-06" | "gemini-2.5-flash-preview-04-17" => {
+            Some(ModelTokenLimit {
+                max_output_tokens: 65_536,
+                context_window_tokens: 1_048_576,
+            })
+        }
         _ => None,
     }
 }
@@ -310,6 +364,11 @@ const FOREIGN_PROVIDER_ENV_VARS: &[(&str, &str, &str)] = &[
         "DASHSCOPE_API_KEY",
         "Alibaba DashScope",
         "prefix your model name with `qwen/` or `qwen-` (e.g. `--model qwen-plus`) so prefix routing selects the DashScope backend",
+    ),
+    (
+        "GEMINI_API_KEY",
+        "Google Gemini",
+        "use a Gemini model alias (e.g. `--model gemini-pro` or `--model gemini-flash`) so the prefix router selects the Gemini backend",
     ),
 ];
 
@@ -768,6 +827,7 @@ NO_EQUALS_LINE
         let _openai = EnvVarGuard::set("OPENAI_API_KEY", None);
         let _xai = EnvVarGuard::set("XAI_API_KEY", None);
         let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", None);
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", None);
 
         // when
         let hint = anthropic_missing_credentials_hint();
@@ -786,6 +846,7 @@ NO_EQUALS_LINE
         let _openai = EnvVarGuard::set("OPENAI_API_KEY", Some("sk-openrouter-varleg"));
         let _xai = EnvVarGuard::set("XAI_API_KEY", None);
         let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", None);
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", None);
 
         // when
         let hint = anthropic_missing_credentials_hint()
@@ -817,6 +878,7 @@ NO_EQUALS_LINE
         let _openai = EnvVarGuard::set("OPENAI_API_KEY", None);
         let _xai = EnvVarGuard::set("XAI_API_KEY", Some("xai-test-key"));
         let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", None);
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", None);
 
         // when
         let hint = anthropic_missing_credentials_hint()
@@ -844,6 +906,7 @@ NO_EQUALS_LINE
         let _openai = EnvVarGuard::set("OPENAI_API_KEY", None);
         let _xai = EnvVarGuard::set("XAI_API_KEY", None);
         let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", Some("sk-dashscope-test"));
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", None);
 
         // when
         let hint = anthropic_missing_credentials_hint()
@@ -871,6 +934,7 @@ NO_EQUALS_LINE
         let _openai = EnvVarGuard::set("OPENAI_API_KEY", Some("sk-openrouter-varleg"));
         let _xai = EnvVarGuard::set("XAI_API_KEY", Some("xai-test-key"));
         let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", Some("sk-dashscope-test"));
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", Some("gemini-test-key"));
 
         // when
         let hint = anthropic_missing_credentials_hint()
@@ -894,6 +958,7 @@ NO_EQUALS_LINE
         let _openai = EnvVarGuard::set("OPENAI_API_KEY", None);
         let _xai = EnvVarGuard::set("XAI_API_KEY", None);
         let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", None);
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", None);
 
         // when
         let error = anthropic_missing_credentials();
@@ -928,6 +993,7 @@ NO_EQUALS_LINE
         let _openai = EnvVarGuard::set("OPENAI_API_KEY", Some("sk-openrouter-varleg"));
         let _xai = EnvVarGuard::set("XAI_API_KEY", None);
         let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", None);
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", None);
 
         // when
         let error = anthropic_missing_credentials();
@@ -971,6 +1037,7 @@ NO_EQUALS_LINE
         let _openai = EnvVarGuard::set("OPENAI_API_KEY", Some(""));
         let _xai = EnvVarGuard::set("XAI_API_KEY", None);
         let _dashscope = EnvVarGuard::set("DASHSCOPE_API_KEY", None);
+        let _gemini = EnvVarGuard::set("GEMINI_API_KEY", None);
 
         // when
         let hint = anthropic_missing_credentials_hint();

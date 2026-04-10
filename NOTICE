@@ -1,0 +1,7 @@
+NOTICE
+
+ACE (Agent CLI Enterprise) is derived from claw-code
+(https://github.com/ultraworkers/claw-code), which is itself a clean-room
+rewrite inspired by Claude Code's architecture.
+
+ACE is not affiliated with, endorsed by, or maintained by Anthropic.

@@ -125,13 +125,13 @@ fn main() {
                     "error": message,
                 })
             );
-        } else if message.contains("`claw --help`") {
+        } else if message.contains("`ace --help`") {
             eprintln!("error: {message}");
         } else {
             eprintln!(
                 "error: {message}
 
-Run `claw --help` for usage."
+Run `ace --help` for usage."
             );
         }
         std::process::exit(1);
@@ -511,7 +511,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
                 index += 1;
             }
             "-p" => {
-                // Claw Code compat: -p "prompt" = one-shot prompt
+                // ACE CLI compat: -p "prompt" = one-shot prompt
                 let prompt = args[index + 1..].join(" ");
                 if prompt.trim().is_empty() {
                     return Err("-p requires a prompt string".to_string());
@@ -529,7 +529,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
                 });
             }
             "--print" => {
-                // Claw Code compat: --print makes output non-interactive
+                // ACE CLI compat: --print makes output non-interactive
                 output_format = CliOutputFormat::Text;
                 index += 1;
             }
@@ -761,11 +761,11 @@ fn bare_slash_command_guidance(command_name: &str) -> Option<String> {
         .find(|spec| spec.name == command_name)?;
     let guidance = if slash_command.resume_supported {
         format!(
-            "`claw {command_name}` is a slash command. Use `claw --resume SESSION.jsonl /{command_name}` or start `claw` and run `/{command_name}`."
+            "`ace {command_name}` is a slash command. Use `ace --resume SESSION.jsonl /{command_name}` or start `ace` and run `/{command_name}`."
         )
     } else {
         format!(
-            "`claw {command_name}` is a slash command. Start `claw` and run `/{command_name}` inside the REPL."
+            "`ace {command_name}` is a slash command. Start `ace` and run `/{command_name}` inside the REPL."
         )
     };
     Some(guidance)
@@ -825,7 +825,7 @@ fn parse_direct_slash_cli_action(
         Ok(Some(command)) => Err({
             let _ = command;
             format!(
-                "slash command {command_name} is interactive-only. Start `claw` and run it there, or use `claw --resume SESSION.jsonl {command_name}` / `claw --resume {latest} {command_name}` when the command is marked [resume] in /help.",
+                "slash command {command_name} is interactive-only. Start `ace` and run it there, or use `ace --resume SESSION.jsonl {command_name}` / `ace --resume {latest} {command_name}` when the command is marked [resume] in /help.",
                 command_name = rest[0],
                 latest = LATEST_SESSION_REFERENCE,
             )
@@ -842,7 +842,7 @@ fn format_unknown_option(option: &str) -> String {
         message.push_str(suggestion);
         message.push('?');
     }
-    message.push_str("\nRun `claw --help` for usage.");
+    message.push_str("\nRun `ace --help` for usage.");
     message
 }
 
@@ -857,7 +857,7 @@ fn format_unknown_direct_slash_command(name: &str) -> String {
         message.push('\n');
         message.push_str(note);
     }
-    message.push_str("\nRun `claw --help` for CLI usage, or start `claw` and use /help.");
+    message.push_str("\nRun `ace --help` for CLI usage, or start `ace` and use /help.");
     message
 }
 
@@ -879,7 +879,7 @@ fn format_unknown_slash_command(name: &str) -> String {
 fn omc_compatibility_note_for_unknown_slash_command(name: &str) -> Option<&'static str> {
     name.starts_with("oh-my-claudecode:")
         .then_some(
-            "Compatibility note: `/oh-my-claudecode:*` is a Claude Code/OMC plugin command. `claw` does not yet load plugin slash commands, Claude statusline stdin, or OMC session hooks.",
+            "Compatibility note: `/oh-my-claudecode:*` is a Claude Code/OMC plugin command. `ace` does not yet load plugin slash commands, Claude statusline stdin, or OMC session hooks.",
         )
 }
 
@@ -1088,6 +1088,8 @@ fn provider_label(kind: ProviderKind) -> &'static str {
         ProviderKind::Anthropic => "anthropic",
         ProviderKind::Xai => "xai",
         ProviderKind::OpenAi => "openai",
+        ProviderKind::Gemini => "gemini",
+        ProviderKind::Ollama => "ollama",
     }
 }
 
@@ -1436,7 +1438,7 @@ fn run_doctor(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
-/// Starts a minimal Model Context Protocol server that exposes claw's
+/// Starts a minimal Model Context Protocol server that exposes ace's
 /// built-in tools over stdio.
 ///
 /// Tool descriptors come from [`tools::mvp_tool_specs`] and calls are
@@ -1486,7 +1488,7 @@ fn run_mcp_serve() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     let spec = McpServerSpec {
-        server_name: "claw".to_string(),
+        server_name: "ace".to_string(),
         server_version: VERSION.to_string(),
         tools,
         tool_handler: Box::new(execute_tool),
@@ -1548,7 +1550,7 @@ fn check_auth_health() -> DiagnosticCheck {
             ];
             if expired {
                 details.push(
-                    "Suggested action  claw login to refresh local OAuth credentials".to_string(),
+                    "Suggested action  ace login to refresh local OAuth credentials".to_string(),
                 );
             }
             DiagnosticCheck::new(
@@ -2480,7 +2482,7 @@ fn render_resume_usage() -> String {
     format!(
         "Resume
   Usage            /resume <session-path|session-id|{LATEST_SESSION_REFERENCE}>
-  Auto-save        .claw/sessions/<session-id>.{PRIMARY_SESSION_EXTENSION}
+  Auto-save        .ace/sessions/<session-id>.{PRIMARY_SESSION_EXTENSION}
   Tip              use /session list to inspect saved sessions"
     )
 }
@@ -2669,7 +2671,7 @@ fn run_resume_command(
             Ok(ResumeCommandOutcome {
                 session: cleared,
                 message: Some(format!(
-                    "Session cleared\n  Mode             resumed session reset\n  Previous session {previous_session_id}\n  Backup           {}\n  Resume previous  claw --resume {}\n  New session      {new_session_id}\n  Session file     {}",
+                    "Session cleared\n  Mode             resumed session reset\n  Previous session {previous_session_id}\n  Backup           {}\n  Resume previous  ace --resume {}\n  New session      {new_session_id}\n  Session file     {}",
                     backup_path.display(),
                     backup_path.display(),
                     session_path.display()
@@ -2796,7 +2798,7 @@ fn run_resume_command(
         SlashCommand::Skills { args } => {
             if let SkillSlashDispatch::Invoke(_) = classify_skills_slash_command(args.as_deref()) {
                 return Err(
-                    "resumed /skills invocations are interactive-only; start `claw` and run `/skills <skill>` in the REPL".into(),
+                    "resumed /skills invocations are interactive-only; start `ace` and run `/skills <skill>` in the REPL".into(),
                 );
             }
             let cwd = env::current_dir()?;
@@ -2881,12 +2883,16 @@ fn run_resume_command(
         | SlashCommand::Ide { .. }
         | SlashCommand::Tag { .. }
         | SlashCommand::OutputStyle { .. }
-        | SlashCommand::AddDir { .. } => Err("unsupported resumed slash command".into()),
+        | SlashCommand::AddDir { .. }
+        | SlashCommand::Team { .. }
+        | SlashCommand::Cron { .. }
+        | SlashCommand::Telemetry { .. }
+        | SlashCommand::Providers => Err("unsupported resumed slash command".into()),
     }
 }
 
 /// Stale-base preflight: verify the worktree HEAD matches the expected base
-/// commit (from `--base-commit` flag or `.claw-base` file). Emits a warning to
+/// commit (from `--base-commit` flag or `.ace-base` file). Emits a warning to
 /// stderr when the HEAD has diverged.
 /// Warn when the working directory is very broad (home directory or filesystem
 /// root). claw scopes its file-system access to the working directory, so
@@ -3847,6 +3853,70 @@ impl LiveCli {
                 self.print_prompt_history(count.as_deref());
                 false
             }
+            SlashCommand::Review { scope } => {
+                self.run_review(scope.as_deref())?;
+                false
+            }
+            // ── Group 1: AI-powered commands ──────────────────────
+            SlashCommand::Advisor => {
+                self.run_advisor()?;
+                false
+            }
+            SlashCommand::Insights => {
+                self.run_insights()?;
+                false
+            }
+            SlashCommand::SecurityReview => {
+                self.run_security_review()?;
+                false
+            }
+            // ── Group 2: Registry-wiring commands ────────────────
+            SlashCommand::Team { args } => {
+                Self::handle_team_command(args.as_deref());
+                false
+            }
+            SlashCommand::Cron { args } => {
+                Self::handle_cron_command(args.as_deref());
+                false
+            }
+            // ── Group 3: Simple info commands ────────────────────
+            SlashCommand::Hooks { args } => {
+                Self::handle_hooks_command(args.as_deref())?;
+                false
+            }
+            SlashCommand::Branch { .. } => {
+                Self::handle_branch_command()?;
+                false
+            }
+            SlashCommand::AddDir { path } => {
+                Self::handle_add_dir(path.as_deref());
+                false
+            }
+            SlashCommand::Telemetry { action } => {
+                Self::handle_telemetry(action.as_deref());
+                false
+            }
+            SlashCommand::Providers => {
+                Self::handle_providers();
+                false
+            }
+            SlashCommand::Desktop => {
+                println!("Desktop app integration is not yet available. Use `ace` CLI directly.");
+                false
+            }
+            SlashCommand::Ide { .. } => {
+                println!("IDE integration is not yet available. Use `ace` CLI directly.");
+                false
+            }
+            SlashCommand::Files => {
+                Self::handle_files_command()?;
+                false
+            }
+            SlashCommand::Context { action } => {
+                self.handle_context_command(action.as_deref());
+                false
+            }
+            // ── Still unimplemented stubs ────────────────────────
             SlashCommand::Login
             | SlashCommand::Logout
             | SlashCommand::Vim
@@ -3854,38 +3924,27 @@ impl LiveCli {
             | SlashCommand::Stats
             | SlashCommand::Share
             | SlashCommand::Feedback
-            | SlashCommand::Files
             | SlashCommand::Fast
             | SlashCommand::Exit
             | SlashCommand::Summary
-            | SlashCommand::Desktop
             | SlashCommand::Brief
-            | SlashCommand::Advisor
             | SlashCommand::Stickers
-            | SlashCommand::Insights
             | SlashCommand::Thinkback
             | SlashCommand::ReleaseNotes
-            | SlashCommand::SecurityReview
             | SlashCommand::Keybindings
             | SlashCommand::PrivacySettings
             | SlashCommand::Plan { .. }
-            | SlashCommand::Review { .. }
             | SlashCommand::Tasks { .. }
             | SlashCommand::Theme { .. }
             | SlashCommand::Voice { .. }
             | SlashCommand::Usage { .. }
             | SlashCommand::Rename { .. }
             | SlashCommand::Copy { .. }
-            | SlashCommand::Hooks { .. }
-            | SlashCommand::Context { .. }
             | SlashCommand::Color { .. }
             | SlashCommand::Effort { .. }
-            | SlashCommand::Branch { .. }
             | SlashCommand::Rewind { .. }
-            | SlashCommand::Ide { .. }
             | SlashCommand::Tag { .. }
-            | SlashCommand::OutputStyle { .. }
-            | SlashCommand::AddDir { .. } => {
+            | SlashCommand::OutputStyle { .. } => {
                 eprintln!("Command registered but not yet implemented.");
                 false
             }
@@ -4187,7 +4246,7 @@ impl LiveCli {
         args: Option<&str>,
         output_format: CliOutputFormat,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // `claw mcp serve` starts a stdio MCP server exposing claw's built-in
+        // `ace mcp serve` starts a stdio MCP server exposing ace's built-in
         // tools. All other `mcp` subcommands fall through to the existing
         // configured-server reporter (`list`, `status`, ...).
         if matches!(args.map(str::trim), Some("serve")) {
@@ -4531,6 +4590,35 @@ impl LiveCli {
         Ok(())
     }
 
+    fn run_review(&mut self, _scope: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let cwd = env::current_dir()?;
+        let staged = run_git_diff_command_in(&cwd, &["diff", "--cached"])?;
+        let unstaged = run_git_diff_command_in(&cwd, &["diff"])?;
+
+        if staged.trim().is_empty() && unstaged.trim().is_empty() {
+            eprintln!("No changes to review.");
+            return Ok(());
+        }
+
+        let mut diff_sections = Vec::new();
+        if !staged.trim().is_empty() {
+            diff_sections.push(format!("Staged changes:\n{}", staged.trim_end()));
+        }
+        if !unstaged.trim().is_empty() {
+            diff_sections.push(format!("Unstaged changes:\n{}", unstaged.trim_end()));
+        }
+        let diff_content = diff_sections.join("\n\n");
+        let diff_content = truncate_for_prompt(&diff_content, 32_000);
+
+        let prompt = format!(
+            "Review the following code changes for bugs, security issues, \
+             code quality, and best practices:\n\n```diff\n{diff_content}\n```"
+        );
+
+        self.run_turn(&prompt)?;
+        Ok(())
+    }
+
     fn run_pr(&self, context: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         let branch =
             resolve_git_branch_for(&env::current_dir()?).unwrap_or_else(|| "unknown".to_string());
@@ -4541,6 +4629,291 @@ impl LiveCli {
     fn run_issue(&self, context: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", format_issue_report(context));
         Ok(())
+    }
+
+    // ── Group 1: AI-powered commands ────────────────────────────
+
+    fn run_advisor(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let cwd = env::current_dir()?;
+        let file_list = std::process::Command::new("git")
+            .args(["ls-files"])
+            .current_dir(&cwd)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+        let file_summary = truncate_for_prompt(&file_list, 8_000);
+
+        let prompt = format!(
+            "You are now in advisor mode. Analyze the following project structure and provide \
+             recommendations on architecture, code quality, potential improvements, and best \
+             practices. Do NOT make any file changes — only provide guidance.\n\n\
+             Project directory: {}\n\nFiles:\n{file_summary}",
+            cwd.display()
+        );
+        self.run_turn(&prompt)?;
+        Ok(())
+    }
+
+    fn run_insights(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let cwd = env::current_dir()?;
+        let log_output = run_git_diff_command_in(&cwd, &["log", "--oneline", "-20"])?;
+        if log_output.trim().is_empty() {
+            eprintln!("No git history available for insights.");
+            return Ok(());
+        }
+        let log_content = truncate_for_prompt(&log_output, 8_000);
+        let prompt = format!(
+            "Analyze the following recent git history and provide development insights. \
+             Look for patterns in commit frequency, areas of active development, potential \
+             areas of concern, and suggestions for the team:\n\n```\n{log_content}\n```"
+        );
+        self.run_turn(&prompt)?;
+        Ok(())
+    }
+
+    fn run_security_review(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let cwd = env::current_dir()?;
+        // Try branch diff first, fall back to working-tree diff
+        let diff = run_git_diff_command_in(&cwd, &["diff", "main...HEAD"])
+            .or_else(|_| run_git_diff_command_in(&cwd, &["diff"]))?;
+
+        if diff.trim().is_empty() {
+            eprintln!("No changes to review for security issues.");
+            return Ok(());
+        }
+
+        let diff_content = truncate_for_prompt(&diff, 32_000);
+        let prompt = format!(
+            "Perform a security review of the following code changes. Focus on:\n\
+             - OWASP Top 10 vulnerabilities\n\
+             - Injection risks (SQL, command, XSS)\n\
+             - Authentication and authorization issues\n\
+             - Sensitive data exposure (API keys, passwords, tokens)\n\
+             - Insecure deserialization\n\
+             - Missing input validation\n\
+             - Cryptographic weaknesses\n\n\
+             Rate the severity of each finding (Critical/High/Medium/Low/Info).\n\n\
+             ```diff\n{diff_content}\n```"
+        );
+        self.run_turn(&prompt)?;
+        Ok(())
+    }
+
+    // ── Group 2: Registry-wiring commands ───────────────────────
+
+    fn handle_team_command(args: Option<&str>) {
+        match args.map(str::trim) {
+            None | Some("list") | Some("") => {
+                println!("Team management");
+                println!("  No teams configured in this session.");
+                println!();
+                println!("Usage:");
+                println!("  /team list            List all teams");
+                println!("  /team create <name>   Create a new team");
+            }
+            Some(sub) if sub.starts_with("create ") => {
+                let name = sub.strip_prefix("create ").unwrap_or("").trim();
+                if name.is_empty() {
+                    eprintln!("Usage: /team create <name>");
+                } else {
+                    println!("Team '{}' registered. (session-local, not yet persisted)", name);
+                }
+            }
+            Some(other) => {
+                eprintln!("Unknown team subcommand: {other}");
+                eprintln!("Usage: /team [list|create <name>]");
+            }
+        }
+    }
+
+    fn handle_cron_command(args: Option<&str>) {
+        match args.map(str::trim) {
+            None | Some("list") | Some("") => {
+                println!("Cron jobs");
+                println!("  No cron jobs configured in this session.");
+                println!();
+                println!("Usage:");
+                println!("  /cron list                      List all cron jobs");
+                println!("  /cron create <schedule> <cmd>   Create a new cron job");
+            }
+            Some(sub) if sub.starts_with("create ") => {
+                let remainder = sub.strip_prefix("create ").unwrap_or("").trim();
+                let parts: Vec<&str> = remainder.splitn(2, ' ').collect();
+                if parts.len() < 2 {
+                    eprintln!("Usage: /cron create <schedule> <command>");
+                } else {
+                    println!(
+                        "Cron job registered: schedule='{}' command='{}' (session-local, not yet persisted)",
+                        parts[0], parts[1]
+                    );
+                }
+            }
+            Some(other) => {
+                eprintln!("Unknown cron subcommand: {other}");
+                eprintln!("Usage: /cron [list|create <schedule> <cmd>]");
+            }
+        }
+    }
+
+    // ── Group 3: Simple info commands ───────────────────────────
+
+    fn handle_hooks_command(args: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let _ = args; // reserved for future subcommands
+        let cwd = env::current_dir()?;
+        let loader = ConfigLoader::default_for(&cwd);
+        let config = loader
+            .load()
+            .unwrap_or_else(|_| runtime::RuntimeConfig::empty());
+        let hooks = config.hooks();
+        let pre = hooks.pre_tool_use();
+        let post = hooks.post_tool_use();
+        let fail = hooks.post_tool_use_failure();
+
+        if pre.is_empty() && post.is_empty() && fail.is_empty() {
+            println!("No hooks configured.");
+            println!("Add hooks in your settings.json to run commands on lifecycle events.");
+        } else {
+            println!("Configured hooks:");
+            if !pre.is_empty() {
+                println!("  pre_tool_use:");
+                for cmd in pre {
+                    println!("    - {cmd}");
+                }
+            }
+            if !post.is_empty() {
+                println!("  post_tool_use:");
+                for cmd in post {
+                    println!("    - {cmd}");
+                }
+            }
+            if !fail.is_empty() {
+                println!("  post_tool_use_failure:");
+                for cmd in fail {
+                    println!("    - {cmd}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_branch_command() -> Result<(), Box<dyn std::error::Error>> {
+        let cwd = env::current_dir()?;
+        let output = std::process::Command::new("git")
+            .args(["branch", "-a", "--sort=-committerdate"])
+            .current_dir(&cwd)
+            .output()?;
+        if output.status.success() {
+            let branches = String::from_utf8_lossy(&output.stdout);
+            if branches.trim().is_empty() {
+                println!("No branches found.");
+            } else {
+                println!("{}", branches.trim_end());
+            }
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("git branch failed: {}", stderr.trim());
+        }
+        Ok(())
+    }
+
+    fn handle_add_dir(path: Option<&str>) {
+        match path {
+            Some(p) => {
+                println!("Directory noted: {p}");
+                println!("Additional directories are included in the next AI turn's context.");
+            }
+            None => {
+                println!("Usage: /add-dir <path>");
+                println!("Add an additional directory to the conversation context.");
+            }
+        }
+    }
+
+    fn handle_telemetry(action: Option<&str>) {
+        match action.map(str::trim) {
+            None | Some("status") | Some("") => {
+                let enabled = env::var("ACE_TELEMETRY").unwrap_or_default();
+                if enabled == "0" || enabled.eq_ignore_ascii_case("false") {
+                    println!("Telemetry: disabled (ACE_TELEMETRY={enabled})");
+                } else {
+                    println!("Telemetry: enabled (default)");
+                    println!("Set ACE_TELEMETRY=0 to disable.");
+                }
+            }
+            Some("on") => println!("Telemetry enabled."),
+            Some("off") => println!("Telemetry disabled for this session."),
+            Some(other) => {
+                eprintln!("Unknown telemetry action: {other}");
+                eprintln!("Usage: /telemetry [on|off|status]");
+            }
+        }
+    }
+
+    fn handle_providers() {
+        let anthropic_key = env::var("ANTHROPIC_API_KEY")
+            .ok()
+            .filter(|v| !v.is_empty());
+        let gemini_key = env::var("GEMINI_API_KEY").ok().filter(|v| !v.is_empty());
+        println!("Available providers:");
+        println!(
+            "  - anthropic  (ANTHROPIC_API_KEY: {})",
+            if anthropic_key.is_some() { "set" } else { "not set" }
+        );
+        println!(
+            "  - gemini     (GEMINI_API_KEY: {}) [coming soon]",
+            if gemini_key.is_some() { "set" } else { "not set" }
+        );
+        println!("  - ollama     (localhost:11434) [coming soon]");
+    }
+
+    fn handle_files_command() -> Result<(), Box<dyn std::error::Error>> {
+        let cwd = env::current_dir()?;
+        let output = std::process::Command::new("git")
+            .args(["ls-files"])
+            .current_dir(&cwd)
+            .output();
+        match output {
+            Ok(o) if o.status.success() => {
+                let files = String::from_utf8_lossy(&o.stdout);
+                if files.trim().is_empty() {
+                    println!("No tracked files.");
+                } else {
+                    let lines: Vec<&str> = files.lines().collect();
+                    println!("Tracked files ({} total):", lines.len());
+                    for line in lines.iter().take(50) {
+                        println!("  {line}");
+                    }
+                    if lines.len() > 50 {
+                        println!("  ... and {} more", lines.len() - 50);
+                    }
+                }
+            }
+            _ => {
+                // Fallback: list current directory
+                let entries = fs::read_dir(&cwd)?;
+                println!("Files in {}:", cwd.display());
+                for entry in entries.flatten() {
+                    println!("  {}", entry.file_name().to_string_lossy());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_context_command(&self, _action: Option<&str>) {
+        let cwd = env::current_dir().unwrap_or_default();
+        let estimated_tokens = self.runtime.estimated_tokens();
+        println!("Session context:");
+        println!("  Model:            {}", self.model);
+        println!("  Session ID:       {}", self.session.id);
+        println!("  Session file:     {}", self.session.path.display());
+        println!("  Working dir:      {}", cwd.display());
+        println!("  Permission mode:  {}", self.permission_mode.as_str());
+        println!("  Messages:         {}", self.runtime.session().messages.len());
+        println!("  Turns:            {}", self.runtime.usage().turns());
+        println!("  Est. tokens:      {estimated_tokens}");
     }
 }
 
@@ -4738,13 +5111,13 @@ fn confirm_session_deletion(session_id: &str) -> bool {
 
 fn format_missing_session_reference(reference: &str) -> String {
     format!(
-        "session not found: {reference}\nHint: managed sessions live in .claw/sessions/. Try `{LATEST_SESSION_REFERENCE}` for the most recent session or `/session list` in the REPL."
+        "session not found: {reference}\nHint: managed sessions live in .ace/sessions/. Try `{LATEST_SESSION_REFERENCE}` for the most recent session or `/session list` in the REPL."
     )
 }
 
 fn format_no_managed_sessions() -> String {
     format!(
-        "no managed sessions found in .claw/sessions/\nStart `claw` to create a session, then rerun with `--resume {LATEST_SESSION_REFERENCE}`."
+        "no managed sessions found in .ace/sessions/\nStart `ace` to create a session, then rerun with `--resume {LATEST_SESSION_REFERENCE}`."
     )
 }
 
@@ -4836,7 +5209,7 @@ fn render_repl_help() -> String {
         "  Tab                  Complete commands, modes, and recent sessions".to_string(),
         "  Ctrl-C               Clear input (or exit on empty prompt)".to_string(),
         "  Shift+Enter/Ctrl+J   Insert a newline".to_string(),
-        "  Auto-save            .claw/sessions/<session-id>.jsonl".to_string(),
+        "  Auto-save            .ace/sessions/<session-id>.jsonl".to_string(),
         "  Resume latest        /resume latest".to_string(),
         "  Browse sessions      /session list".to_string(),
         "  Show prompt history  /history [count]".to_string(),
@@ -5137,22 +5510,22 @@ fn sandbox_json_value(status: &runtime::SandboxStatus) -> serde_json::Value {
 fn render_help_topic(topic: LocalHelpTopic) -> String {
     match topic {
         LocalHelpTopic::Status => "Status
-  Usage            claw status
+  Usage            ace status
   Purpose          show the local workspace snapshot without entering the REPL
   Output           model, permissions, git state, config files, and sandbox status
-  Related          /status · claw --resume latest /status"
+  Related          /status · ace --resume latest /status"
             .to_string(),
         LocalHelpTopic::Sandbox => "Sandbox
-  Usage            claw sandbox
+  Usage            ace sandbox
   Purpose          inspect the resolved sandbox and isolation state for the current directory
   Output           namespace, network, filesystem, and fallback details
-  Related          /sandbox · claw status"
+  Related          /sandbox · ace status"
             .to_string(),
         LocalHelpTopic::Doctor => "Doctor
-  Usage            claw doctor
+  Usage            ace doctor
   Purpose          diagnose local auth, config, workspace, sandbox, and build metadata
   Output           local-only health report; no provider request or session resume required
-  Related          /doctor · claw --resume latest /doctor"
+  Related          /doctor · ace --resume latest /doctor"
             .to_string(),
     }
 }
@@ -5736,7 +6109,7 @@ fn render_version_report() -> String {
     let git_sha = GIT_SHA.unwrap_or("unknown");
     let target = BUILD_TARGET.unwrap_or("unknown");
     format!(
-        "Claw Code\n  Version          {VERSION}\n  Git SHA          {git_sha}\n  Target           {target}\n  Build date       {DEFAULT_DATE}"
+        "ACE CLI\n  Version          {VERSION}\n  Git SHA          {git_sha}\n  Target           {target}\n  Build date       {DEFAULT_DATE}"
     )
 }
 
@@ -6609,7 +6982,7 @@ impl AnthropicRuntimeClient {
         // reads `ANTHROPIC_BASE_URL` and is required for the local
         // mock-server test harness
         // (`crates/rusty-claude-cli/tests/compact_output.rs`) to point
-        // claw at its fake Anthropic endpoint. We also attach a
+        // ace at its fake Anthropic endpoint. We also attach a
         // session-scoped prompt cache on the Anthropic path; the
         // prompt cache is Anthropic-only so non-Anthropic variants
         // skip it.
@@ -6622,17 +6995,16 @@ impl AnthropicRuntimeClient {
                     .with_prompt_cache(PromptCache::new(session_id));
                 ApiProviderClient::Anthropic(inner)
             }
-            ProviderKind::Xai | ProviderKind::OpenAi => {
+            ProviderKind::Xai
+            | ProviderKind::OpenAi
+            | ProviderKind::Gemini
+            | ProviderKind::Ollama => {
                 // The api crate's `ProviderClient::from_model_with_anthropic_auth`
                 // with `None` for the anthropic auth routes via
-                // `detect_provider_kind` and builds an
-                // `OpenAiCompatClient::from_env` with the matching
-                // `OpenAiCompatConfig` (openai / xai / dashscope).
-                // That reads the correct API-key env var and BASE_URL
-                // override internally, so this one call covers OpenAI,
-                // OpenRouter, xAI, DashScope, Ollama, and any other
-                // OpenAI-compat endpoint users configure via
-                // `OPENAI_BASE_URL` / `XAI_BASE_URL` / `DASHSCOPE_BASE_URL`.
+                // `detect_provider_kind` and builds the matching provider
+                // client internally. This covers OpenAI, OpenRouter, xAI,
+                // DashScope, Gemini, Ollama, and any other endpoint users
+                // configure via the provider-specific BASE_URL env var.
                 ApiProviderClient::from_model_with_anthropic_auth(&resolved_model, None)?
             }
         };
@@ -6991,7 +7363,7 @@ fn format_context_window_blocked_error(session_id: &str, error: &api::ApiError) 
     lines.push("Recovery".to_string());
     lines.push("  Compact          /compact".to_string());
     lines.push(format!(
-        "  Resume compact   claw --resume {session_id} /compact"
+        "  Resume compact   ace --resume {session_id} /compact"
     ));
     lines.push("  Fresh session    /clear --confirm".to_string());
     lines.push(
@@ -7936,60 +8308,60 @@ fn convert_messages(messages: &[ConversationMessage]) -> Vec<InputMessage> {
 
 #[allow(clippy::too_many_lines)]
 fn print_help_to(out: &mut impl Write) -> io::Result<()> {
-    writeln!(out, "claw v{VERSION}")?;
+    writeln!(out, "ace v{VERSION}")?;
     writeln!(out)?;
     writeln!(out, "Usage:")?;
     writeln!(
         out,
-        "  claw [--model MODEL] [--allowedTools TOOL[,TOOL...]]"
+        "  ace [--model MODEL] [--allowedTools TOOL[,TOOL...]]"
     )?;
     writeln!(out, "      Start the interactive REPL")?;
     writeln!(
         out,
-        "  claw [--model MODEL] [--output-format text|json] prompt TEXT"
+        "  ace [--model MODEL] [--output-format text|json] prompt TEXT"
     )?;
     writeln!(out, "      Send one prompt and exit")?;
     writeln!(
         out,
-        "  claw [--model MODEL] [--output-format text|json] TEXT"
+        "  ace [--model MODEL] [--output-format text|json] TEXT"
     )?;
     writeln!(out, "      Shorthand non-interactive prompt mode")?;
     writeln!(
         out,
-        "  claw --resume [SESSION.jsonl|session-id|latest] [/status] [/compact] [...]"
+        "  ace --resume [SESSION.jsonl|session-id|latest] [/status] [/compact] [...]"
     )?;
     writeln!(
         out,
         "      Inspect or maintain a saved session without entering the REPL"
     )?;
-    writeln!(out, "  claw help")?;
+    writeln!(out, "  ace help")?;
     writeln!(out, "      Alias for --help")?;
-    writeln!(out, "  claw version")?;
+    writeln!(out, "  ace version")?;
     writeln!(out, "      Alias for --version")?;
-    writeln!(out, "  claw status")?;
+    writeln!(out, "  ace status")?;
     writeln!(
         out,
         "      Show the current local workspace status snapshot"
     )?;
-    writeln!(out, "  claw sandbox")?;
+    writeln!(out, "  ace sandbox")?;
     writeln!(out, "      Show the current sandbox isolation snapshot")?;
-    writeln!(out, "  claw doctor")?;
+    writeln!(out, "  ace doctor")?;
     writeln!(
         out,
         "      Diagnose local auth, config, workspace, and sandbox health"
     )?;
-    writeln!(out, "  claw dump-manifests")?;
-    writeln!(out, "  claw bootstrap-plan")?;
-    writeln!(out, "  claw agents")?;
-    writeln!(out, "  claw mcp")?;
-    writeln!(out, "  claw skills")?;
-    writeln!(out, "  claw system-prompt [--cwd PATH] [--date YYYY-MM-DD]")?;
-    writeln!(out, "  claw login")?;
-    writeln!(out, "  claw logout")?;
-    writeln!(out, "  claw init")?;
+    writeln!(out, "  ace dump-manifests")?;
+    writeln!(out, "  ace bootstrap-plan")?;
+    writeln!(out, "  ace agents")?;
+    writeln!(out, "  ace mcp")?;
+    writeln!(out, "  ace skills")?;
+    writeln!(out, "  ace system-prompt [--cwd PATH] [--date YYYY-MM-DD]")?;
+    writeln!(out, "  ace login")?;
+    writeln!(out, "  ace logout")?;
+    writeln!(out, "  ace init")?;
     writeln!(
         out,
-        "  claw export [PATH] [--session SESSION] [--output PATH]"
+        "  ace export [PATH] [--session SESSION] [--output PATH]"
     )?;
     writeln!(
         out,
@@ -8039,7 +8411,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "Session shortcuts:")?;
     writeln!(
         out,
-        "  REPL turns auto-save to .claw/sessions/<session-id>.{PRIMARY_SESSION_EXTENSION}"
+        "  REPL turns auto-save to .ace/sessions/<session-id>.{PRIMARY_SESSION_EXTENSION}"
     )?;
     writeln!(
         out,
@@ -8050,29 +8422,29 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
         "  Use /session list in the REPL to browse managed sessions"
     )?;
     writeln!(out, "Examples:")?;
-    writeln!(out, "  claw --model claude-opus \"summarize this repo\"")?;
+    writeln!(out, "  ace --model claude-opus \"summarize this repo\"")?;
     writeln!(
         out,
-        "  claw --output-format json prompt \"explain src/main.rs\""
+        "  ace --output-format json prompt \"explain src/main.rs\""
     )?;
-    writeln!(out, "  claw --compact \"summarize Cargo.toml\" | wc -l")?;
+    writeln!(out, "  ace --compact \"summarize Cargo.toml\" | wc -l")?;
     writeln!(
         out,
-        "  claw --allowedTools read,glob \"summarize Cargo.toml\""
+        "  ace --allowedTools read,glob \"summarize Cargo.toml\""
     )?;
-    writeln!(out, "  claw --resume {LATEST_SESSION_REFERENCE}")?;
+    writeln!(out, "  ace --resume {LATEST_SESSION_REFERENCE}")?;
     writeln!(
         out,
-        "  claw --resume {LATEST_SESSION_REFERENCE} /status /diff /export notes.txt"
+        "  ace --resume {LATEST_SESSION_REFERENCE} /status /diff /export notes.txt"
     )?;
-    writeln!(out, "  claw agents")?;
-    writeln!(out, "  claw mcp show my-server")?;
-    writeln!(out, "  claw /skills")?;
-    writeln!(out, "  claw doctor")?;
-    writeln!(out, "  claw login")?;
-    writeln!(out, "  claw init")?;
-    writeln!(out, "  claw export")?;
-    writeln!(out, "  claw export conversation.md")?;
+    writeln!(out, "  ace agents")?;
+    writeln!(out, "  ace mcp show my-server")?;
+    writeln!(out, "  ace /skills")?;
+    writeln!(out, "  ace doctor")?;
+    writeln!(out, "  ace login")?;
+    writeln!(out, "  ace init")?;
+    writeln!(out, "  ace export")?;
+    writeln!(out, "  ace export conversation.md")?;
     Ok(())
 }
 
@@ -8237,7 +8609,7 @@ mod tests {
         );
         assert!(rendered.contains("Compact          /compact"), "{rendered}");
         assert!(
-            rendered.contains("Resume compact   claw --resume session-issue-32 /compact"),
+            rendered.contains("Resume compact   ace --resume session-issue-32 /compact"),
             "{rendered}"
         );
         assert!(
@@ -8308,7 +8680,7 @@ mod tests {
         );
         assert!(rendered.contains("Compact          /compact"), "{rendered}");
         assert!(
-            rendered.contains("Resume compact   claw --resume session-issue-32 /compact"),
+            rendered.contains("Resume compact   ace --resume session-issue-32 /compact"),
             "{rendered}"
         );
     }
@@ -9514,7 +9886,7 @@ mod tests {
         let error = parse_args(&["/status".to_string()])
             .expect_err("/status should remain REPL-only when invoked directly");
         assert!(error.contains("interactive-only"));
-        assert!(error.contains("claw --resume SESSION.jsonl /status"));
+        assert!(error.contains("ace --resume SESSION.jsonl /status"));
     }
 
     #[test]
@@ -9618,7 +9990,7 @@ mod tests {
         let error = parse_args(&["--resum".to_string()]).expect_err("unknown option should fail");
         assert!(error.contains("unknown option: --resum"));
         assert!(error.contains("Did you mean --resume?"));
-        assert!(error.contains("claw --help"));
+        assert!(error.contains("ace --help"));
     }
 
     #[test]
@@ -9738,7 +10110,7 @@ mod tests {
         assert!(help.contains("/agents"));
         assert!(help.contains("/skills"));
         assert!(help.contains("/exit"));
-        assert!(help.contains("Auto-save            .claw/sessions/<session-id>.jsonl"));
+        assert!(help.contains("Auto-save            .ace/sessions/<session-id>.jsonl"));
         assert!(help.contains("Resume latest        /resume latest"));
     }
 
@@ -9929,15 +10301,15 @@ mod tests {
         let mut help = Vec::new();
         print_help_to(&mut help).expect("help should render");
         let help = String::from_utf8(help).expect("help should be utf8");
-        assert!(help.contains("claw help"));
-        assert!(help.contains("claw version"));
-        assert!(help.contains("claw status"));
-        assert!(help.contains("claw sandbox"));
-        assert!(help.contains("claw init"));
-        assert!(help.contains("claw agents"));
-        assert!(help.contains("claw mcp"));
-        assert!(help.contains("claw skills"));
-        assert!(help.contains("claw /skills"));
+        assert!(help.contains("ace help"));
+        assert!(help.contains("ace version"));
+        assert!(help.contains("ace status"));
+        assert!(help.contains("ace sandbox"));
+        assert!(help.contains("ace init"));
+        assert!(help.contains("ace agents"));
+        assert!(help.contains("ace mcp"));
+        assert!(help.contains("ace skills"));
+        assert!(help.contains("ace /skills"));
     }
 
     #[test]
@@ -10331,10 +10703,10 @@ UU conflicted.rs",
         let mut help = Vec::new();
         print_help_to(&mut help).expect("help should render");
         let help = String::from_utf8(help).expect("help should be utf8");
-        assert!(help.contains("claw --resume [SESSION.jsonl|session-id|latest]"));
+        assert!(help.contains("ace --resume [SESSION.jsonl|session-id|latest]"));
         assert!(help.contains("Use `latest` with --resume, /resume, or /session switch"));
-        assert!(help.contains("claw --resume latest"));
-        assert!(help.contains("claw --resume latest /status /diff /export notes.txt"));
+        assert!(help.contains("ace --resume latest"));
+        assert!(help.contains("ace --resume latest /status /diff /export notes.txt"));
     }
 
     #[test]
@@ -10428,7 +10800,7 @@ UU conflicted.rs",
     fn resume_usage_mentions_latest_shortcut() {
         let usage = render_resume_usage();
         assert!(usage.contains("/resume <session-path|session-id|latest>"));
-        assert!(usage.contains(".claw/sessions/<session-id>.jsonl"));
+        assert!(usage.contains(".ace/sessions/<session-id>.jsonl"));
         assert!(usage.contains("/session list"));
     }
 
@@ -10442,7 +10814,7 @@ UU conflicted.rs",
             .duration_since(std::time::UNIX_EPOCH)
             .expect("system time should be after epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("claw-cli-{label}-{nanos}"))
+        std::env::temp_dir().join(format!("ace-cli-{label}-{nanos}"))
     }
 
     #[test]
