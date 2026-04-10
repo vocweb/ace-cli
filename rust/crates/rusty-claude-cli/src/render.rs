@@ -604,6 +604,223 @@ impl TerminalRenderer {
         }
         out.flush()
     }
+
+    // ── ratatui Line producers (used by TUI mode) ──────────────────────
+
+    /// Convert markdown text to styled `ratatui::text::Line` values.
+    ///
+    /// This is a simplified renderer that covers the most common markdown
+    /// elements (headings, emphasis, strong, code, links, blockquotes).
+    /// Code-block syntax-highlighting is omitted; blocks render in the
+    /// `inline_code` colour instead.
+    #[must_use]
+    pub fn render_markdown_to_lines(&self, markdown: &str) -> Vec<ratatui::text::Line<'static>> {
+        use ratatui::prelude::{Color as RColor, Span, Style, Modifier, Line as RLine};
+
+        let normalized = normalize_nested_fences(markdown);
+        let mut lines: Vec<RLine<'static>> = Vec::new();
+        let mut spans: Vec<Span<'static>> = Vec::new();
+        let mut style_stack: Vec<Style> = vec![Style::default()];
+        let mut in_code_block = false;
+
+        let map_color = |c: Color| -> RColor {
+            match c {
+                Color::Black => RColor::Black,
+                Color::DarkGrey => RColor::DarkGray,
+                Color::Red => RColor::Red,
+                Color::DarkRed => RColor::Red,
+                Color::Green => RColor::Green,
+                Color::DarkGreen => RColor::Green,
+                Color::Yellow => RColor::Yellow,
+                Color::DarkYellow => RColor::Yellow,
+                Color::Blue => RColor::Blue,
+                Color::DarkBlue => RColor::Blue,
+                Color::Magenta => RColor::Magenta,
+                Color::DarkMagenta => RColor::Magenta,
+                Color::Cyan => RColor::Cyan,
+                Color::DarkCyan => RColor::Cyan,
+                Color::White => RColor::White,
+                Color::Grey => RColor::Gray,
+                Color::Rgb { r, g, b } => RColor::Rgb(r, g, b),
+                Color::AnsiValue(v) => RColor::Indexed(v),
+                _ => RColor::White,
+            }
+        };
+
+        let theme = &self.color_theme;
+
+        for event in Parser::new_ext(&normalized, Options::all()) {
+            match event {
+                Event::Start(Tag::Heading { level, .. }) => {
+                    let style = Style::default()
+                        .fg(map_color(theme.heading))
+                        .add_modifier(Modifier::BOLD);
+                    style_stack.push(style);
+                    // Flush previous line before heading
+                    if !spans.is_empty() {
+                        lines.push(RLine::from(std::mem::take(&mut spans)));
+                    }
+                }
+                Event::End(TagEnd::Heading(..)) => {
+                    style_stack.pop();
+                    if !spans.is_empty() {
+                        lines.push(RLine::from(std::mem::take(&mut spans)));
+                    }
+                    lines.push(RLine::default()); // blank line after heading
+                }
+                Event::Start(Tag::Emphasis) => {
+                    let style = Style::default()
+                        .fg(map_color(theme.emphasis))
+                        .add_modifier(Modifier::ITALIC);
+                    style_stack.push(style);
+                }
+                Event::End(TagEnd::Emphasis) => { style_stack.pop(); }
+                Event::Start(Tag::Strong) => {
+                    let style = Style::default()
+                        .fg(map_color(theme.strong))
+                        .add_modifier(Modifier::BOLD);
+                    style_stack.push(style);
+                }
+                Event::End(TagEnd::Strong) => { style_stack.pop(); }
+                Event::Start(Tag::Link { .. }) => {
+                    let style = Style::default()
+                        .fg(map_color(theme.link))
+                        .add_modifier(Modifier::UNDERLINED);
+                    style_stack.push(style);
+                }
+                Event::End(TagEnd::Link) => { style_stack.pop(); }
+                Event::Start(Tag::BlockQuote(..)) => {
+                    let style = Style::default().fg(map_color(theme.quote));
+                    style_stack.push(style);
+                    spans.push(Span::styled("│ ".to_string(), style));
+                }
+                Event::End(TagEnd::BlockQuote(..)) => {
+                    style_stack.pop();
+                    if !spans.is_empty() {
+                        lines.push(RLine::from(std::mem::take(&mut spans)));
+                    }
+                }
+                Event::Start(Tag::CodeBlock(..)) => {
+                    in_code_block = true;
+                    if !spans.is_empty() {
+                        lines.push(RLine::from(std::mem::take(&mut spans)));
+                    }
+                }
+                Event::End(TagEnd::CodeBlock) => {
+                    in_code_block = false;
+                    if !spans.is_empty() {
+                        lines.push(RLine::from(std::mem::take(&mut spans)));
+                    }
+                }
+                Event::End(TagEnd::Paragraph) => {
+                    if !spans.is_empty() {
+                        lines.push(RLine::from(std::mem::take(&mut spans)));
+                    }
+                    lines.push(RLine::default());
+                }
+                Event::Code(code) => {
+                    let style = Style::default().fg(map_color(theme.inline_code));
+                    spans.push(Span::styled(format!("`{code}`"), style));
+                }
+                Event::Text(text) => {
+                    let style = style_stack.last().copied().unwrap_or_default();
+                    let code_style = if in_code_block {
+                        Style::default().fg(map_color(theme.inline_code))
+                    } else {
+                        style
+                    };
+                    for (i, line_text) in text.split('\n').enumerate() {
+                        if i > 0 {
+                            lines.push(RLine::from(std::mem::take(&mut spans)));
+                        }
+                        if !line_text.is_empty() {
+                            spans.push(Span::styled(line_text.to_string(), code_style));
+                        }
+                    }
+                }
+                Event::SoftBreak | Event::HardBreak => {
+                    lines.push(RLine::from(std::mem::take(&mut spans)));
+                }
+                Event::Start(Tag::List(..)) | Event::End(TagEnd::List(..)) => {
+                    if !spans.is_empty() {
+                        lines.push(RLine::from(std::mem::take(&mut spans)));
+                    }
+                }
+                Event::Start(Tag::Item) => {
+                    spans.push(Span::raw("  • ".to_string()));
+                }
+                Event::End(TagEnd::Item) => {
+                    if !spans.is_empty() {
+                        lines.push(RLine::from(std::mem::take(&mut spans)));
+                    }
+                }
+                _ => {}
+            }
+        }
+        if !spans.is_empty() {
+            lines.push(RLine::from(spans));
+        }
+        if lines.is_empty() {
+            lines.push(RLine::raw(markdown.to_string()));
+        }
+        lines
+    }
+
+    /// Format a tool-call start as styled `Line` values for the TUI.
+    #[must_use]
+    pub fn format_tool_start_lines(tool_name: &str, input: &str) -> Vec<ratatui::text::Line<'static>> {
+        use ratatui::prelude::{Color as RColor, Span, Style, Modifier, Line as RLine};
+        let border_style = Style::default().fg(RColor::DarkGray);
+        let name_style = Style::default().fg(RColor::Cyan).add_modifier(Modifier::BOLD);
+        vec![
+            RLine::from(vec![
+                Span::styled("  ╭─ ".to_string(), border_style),
+                Span::styled(tool_name.to_string(), name_style),
+                Span::styled(" ─╮".to_string(), border_style),
+            ]),
+            RLine::from(vec![
+                Span::styled("  │ ".to_string(), border_style),
+                Span::raw(truncate_display(input, 120)),
+            ]),
+        ]
+    }
+
+    /// Format a tool result as styled `Line` values for the TUI.
+    #[must_use]
+    pub fn format_tool_result_lines(
+        tool_name: &str,
+        output: &str,
+        is_error: bool,
+    ) -> Vec<ratatui::text::Line<'static>> {
+        use ratatui::prelude::{Color as RColor, Span, Style, Line as RLine};
+        let border_style = Style::default().fg(RColor::DarkGray);
+        let (icon, color) = if is_error {
+            ("✗", RColor::Red)
+        } else {
+            ("✓", RColor::Green)
+        };
+        let mut result = vec![RLine::from(vec![
+            Span::styled(format!("  {icon} "), Style::default().fg(color)),
+            Span::styled(tool_name.to_string(), border_style),
+        ])];
+        for line in output.lines().take(20) {
+            result.push(RLine::from(vec![
+                Span::styled("  │ ".to_string(), border_style),
+                Span::raw(truncate_display(line, 160)),
+            ]));
+        }
+        result.push(RLine::from(Span::styled("  ╰───╯".to_string(), border_style)));
+        result
+    }
+}
+
+fn truncate_display(s: &str, max: usize) -> String {
+    if s.chars().count() > max {
+        let truncated: String = s.chars().take(max.saturating_sub(3)).collect();
+        format!("{truncated}...")
+    } else {
+        s.to_string()
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
