@@ -7,9 +7,11 @@
     clippy::unused_self
 )]
 mod hud;
+mod hud_widget;
 mod init;
 mod input;
 mod render;
+mod tui_app;
 mod tui_input;
 
 use std::collections::BTreeSet;
