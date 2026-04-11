@@ -11,8 +11,8 @@ use ratatui::{
 };
 
 use crate::hud::state::HudState;
-use crate::hud::widget::HudFooter;
 use crate::tui::input::TuiInput;
+use crate::tui::status_bar::StatusBar;
 
 const MAX_CONTENT_LINES: usize = 10_000;
 
@@ -91,7 +91,7 @@ impl TuiApp {
     /// Render the 3-zone layout into the given frame.
     pub fn render(&self, frame: &mut Frame) {
         let input_height = self.input.display_lines() as u16 + 2; // +2 for border
-        let hud_height: u16 = if frame.area().width < 60 { 1 } else { 2 };
+        let hud_height: u16 = 1;
 
         let chunks = Layout::vertical([
             Constraint::Min(3),               // Zone 1: Content
@@ -202,10 +202,12 @@ impl TuiApp {
         }
     }
 
-    /// Render the HUD footer (Zone 3).
+    /// Render the HUD status bar (Zone 3).
     fn render_hud(&self, frame: &mut Frame, area: Rect) {
-        let footer = HudFooter::new(&self.hud);
-        frame.render_widget(footer, area);
+        let theme = crate::tui::theme::ClaudeTheme::default();
+        let permission_label = "default";
+        let bar = StatusBar::new(&self.hud, &theme, permission_label);
+        frame.render_widget(bar, area);
     }
 
     /// Scroll up by a number of lines, disabling auto-scroll.

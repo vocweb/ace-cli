@@ -4,6 +4,7 @@ pub(crate) mod events;
 pub(crate) mod input;
 pub(crate) mod permission;
 pub(crate) mod spinner;
+pub(crate) mod status_bar;
 pub(crate) mod streaming;
 pub(crate) mod theme;
 pub(crate) mod tool_panel;
