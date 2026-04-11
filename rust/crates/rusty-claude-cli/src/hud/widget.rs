@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::Widget;
 
-use crate::hud::HudState;
+use crate::hud::state::HudState;
 
 /// A 2-line footer widget that renders HUD information from `HudState`.
 ///

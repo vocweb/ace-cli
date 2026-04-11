@@ -10,9 +10,9 @@ use ratatui::{
     Terminal,
 };
 
-use crate::hud::HudState;
-use crate::hud_widget::HudFooter;
-use crate::tui_input::TuiInput;
+use crate::hud::state::HudState;
+use crate::hud::widget::HudFooter;
+use crate::tui::input::TuiInput;
 
 const MAX_CONTENT_LINES: usize = 10_000;
 
