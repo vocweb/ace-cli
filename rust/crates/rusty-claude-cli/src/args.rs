@@ -1166,11 +1166,8 @@ mod tests {
         std::env::temp_dir().join(format!("rusty-claude-cli-args-{nanos}-{unique}"))
     }
 
-    fn env_lock() -> MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_env_lock()
     }
 
     fn with_current_dir<T>(cwd: &std::path::Path, f: impl FnOnce() -> T) -> T {
