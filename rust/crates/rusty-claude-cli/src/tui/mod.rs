@@ -1,4 +1,5 @@
 pub(crate) mod app;
+pub(crate) mod dropdown;
 pub(crate) mod event;
 pub(crate) mod events;
 pub(crate) mod input;
