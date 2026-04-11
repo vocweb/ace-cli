@@ -8,7 +8,7 @@ use crate::tui::app::{init_terminal, restore_terminal, TuiApp, TuiMode};
 use crate::tui::input::InputAction;
 use crate::tui::spinner::{ShimmerState, SpinnerState};
 use crate::tui::theme::ClaudeTheme;
-use commands::SlashCommand;
+use commands::{slash_command_specs, SlashCommand};
 use ratatui::{
     style::Style,
     text::{Line, Span},
@@ -104,7 +104,13 @@ pub(crate) fn run_tui_repl(
         original_hook(panic_info);
     }));
 
-    let mut app = TuiApp::new(cli.model.clone(), cwd);
+    // Build dropdown candidates from slash command specs
+    let dropdown_candidates: Vec<(String, String)> = slash_command_specs()
+        .iter()
+        .map(|spec| (spec.name.to_string(), spec.summary.to_string()))
+        .collect();
+
+    let mut app = TuiApp::new(cli.model.clone(), cwd, dropdown_candidates);
     app.hud.refresh_git();
 
     // Provide slash-command completions for Tab

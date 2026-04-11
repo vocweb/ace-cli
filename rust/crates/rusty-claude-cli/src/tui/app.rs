@@ -11,6 +11,7 @@ use ratatui::{
 };
 
 use crate::hud::state::HudState;
+use crate::tui::dropdown::{render_dropdown, CommandDropdown};
 use crate::tui::input::TuiInput;
 use crate::tui::status_bar::StatusBar;
 
@@ -36,6 +37,9 @@ pub struct TuiApp {
     // Zone 2: Input
     pub input: TuiInput,
 
+    // Zone 2.5: Command autocomplete dropdown
+    pub dropdown: CommandDropdown,
+
     // Zone 3: HUD
     pub hud: HudState,
 
@@ -47,12 +51,17 @@ pub struct TuiApp {
 
 impl TuiApp {
     /// Create a new TuiApp with empty content and default state.
-    pub fn new(model_name: String, project_path: String) -> Self {
+    pub fn new(
+        model_name: String,
+        project_path: String,
+        dropdown_candidates: Vec<(String, String)>,
+    ) -> Self {
         Self {
             content_lines: Vec::new(),
             scroll_offset: 0,
             auto_scroll: true,
             input: TuiInput::new(),
+            dropdown: CommandDropdown::new(dropdown_candidates),
             hud: HudState::new(model_name, project_path),
             should_quit: false,
             mode: TuiMode::Input,
@@ -88,21 +97,40 @@ impl TuiApp {
         self.scroll_offset = self.content_lines.len().saturating_sub(1);
     }
 
-    /// Render the 3-zone layout into the given frame.
+    /// Render the layout into the given frame.
+    /// Uses a 4-zone layout when the dropdown is open, otherwise 3-zone.
     pub fn render(&self, frame: &mut Frame) {
         let input_height = self.input.display_lines() as u16 + 2; // +2 for border
         let hud_height: u16 = 1;
+        let dropdown_height = self.dropdown.render_height();
 
-        let chunks = Layout::vertical([
-            Constraint::Min(3),               // Zone 1: Content
-            Constraint::Length(input_height), // Zone 2: Input
-            Constraint::Length(hud_height),   // Zone 3: HUD
-        ])
-        .split(frame.area());
+        if dropdown_height > 0 {
+            // 4-zone layout: content, input, dropdown, HUD
+            let chunks = Layout::vertical([
+                Constraint::Min(3),                  // Zone 1: Content
+                Constraint::Length(input_height),     // Zone 2: Input
+                Constraint::Length(dropdown_height),  // Zone 2.5: Dropdown
+                Constraint::Length(hud_height),       // Zone 3: HUD
+            ])
+            .split(frame.area());
 
-        self.render_content(frame, chunks[0]);
-        self.render_input(frame, chunks[1]);
-        self.render_hud(frame, chunks[2]);
+            self.render_content(frame, chunks[0]);
+            self.render_input(frame, chunks[1]);
+            render_dropdown(&self.dropdown, frame, chunks[2]);
+            self.render_hud(frame, chunks[3]);
+        } else {
+            // Standard 3-zone layout
+            let chunks = Layout::vertical([
+                Constraint::Min(3),
+                Constraint::Length(input_height),
+                Constraint::Length(hud_height),
+            ])
+            .split(frame.area());
+
+            self.render_content(frame, chunks[0]);
+            self.render_input(frame, chunks[1]);
+            self.render_hud(frame, chunks[2]);
+        }
     }
 
     /// Render the scrollable content area (Zone 1).
@@ -250,7 +278,7 @@ mod tests {
 
     #[test]
     fn test_new_app() {
-        let app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string());
+        let app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string(), vec![]);
         assert!(app.content_lines.is_empty());
         assert_eq!(app.scroll_offset, 0);
         assert!(app.auto_scroll);
@@ -260,13 +288,13 @@ mod tests {
 
     #[test]
     fn test_tui_mode_default_is_input() {
-        let app = TuiApp::new("claude-3".to_string(), "/tmp".to_string());
+        let app = TuiApp::new("claude-3".to_string(), "/tmp".to_string(), vec![]);
         assert_eq!(app.mode, TuiMode::Input);
     }
 
     #[test]
     fn test_tui_mode_transitions() {
-        let mut app = TuiApp::new("claude-3".to_string(), "/tmp".to_string());
+        let mut app = TuiApp::new("claude-3".to_string(), "/tmp".to_string(), vec![]);
         app.mode = TuiMode::Streaming;
         assert_eq!(app.mode, TuiMode::Streaming);
         app.mode = TuiMode::Permission;
@@ -277,14 +305,14 @@ mod tests {
 
     #[test]
     fn test_push_text() {
-        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string());
+        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string(), vec![]);
         app.push_text("Hello, world!".to_string(), Style::default());
         assert_eq!(app.content_lines.len(), 1);
     }
 
     #[test]
     fn test_push_content_auto_scroll() {
-        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string());
+        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string(), vec![]);
         for i in 0..20 {
             app.push_text(format!("Line {i}"), Style::default());
         }
@@ -295,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_push_content_trimming() {
-        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string());
+        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string(), vec![]);
         // Push more than MAX_CONTENT_LINES
         let lines: Vec<Line<'static>> = (0..MAX_CONTENT_LINES + 100)
             .map(|i| Line::from(format!("Line {i}")))
@@ -306,7 +334,7 @@ mod tests {
 
     #[test]
     fn test_scroll_up_disables_auto_scroll() {
-        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string());
+        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string(), vec![]);
         for i in 0..50 {
             app.push_text(format!("Line {i}"), Style::default());
         }
@@ -318,7 +346,7 @@ mod tests {
 
     #[test]
     fn test_scroll_down_re_enables_auto_scroll() {
-        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string());
+        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string(), vec![]);
         for i in 0..50 {
             app.push_text(format!("Line {i}"), Style::default());
         }
@@ -333,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_scroll_up_clamp_at_zero() {
-        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string());
+        let mut app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string(), vec![]);
         app.push_text("Hello".to_string(), Style::default());
         app.scroll_up(100);
         assert_eq!(app.scroll_offset, 0);
@@ -341,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_input_height_with_border() {
-        let app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string());
+        let app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string(), vec![]);
         // 1 line input + 2 border lines = 3
         let input_height = app.input.display_lines() as u16 + 2;
         assert_eq!(input_height, 3);
