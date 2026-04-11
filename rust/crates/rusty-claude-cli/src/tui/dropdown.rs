@@ -1,3 +1,10 @@
+use ratatui::{
+    prelude::*,
+    widgets::{Block, BorderType, Borders, Paragraph},
+};
+
+use crate::tui::theme::ClaudeTheme;
+
 const MAX_VISIBLE: usize = 8;
 
 /// Command autocomplete dropdown state.
@@ -119,6 +126,58 @@ impl CommandDropdown {
         }
         let items = self.filtered.len().min(MAX_VISIBLE);
         items as u16 + 2 // +2 for top/bottom border
+    }
+}
+
+/// Render the command dropdown into the given area.
+/// Called by TuiApp::render() when dropdown.is_open().
+pub fn render_dropdown(dropdown: &CommandDropdown, frame: &mut Frame, area: Rect) {
+    let theme = ClaudeTheme::default();
+    let items = dropdown.visible_items();
+    if items.is_empty() {
+        return;
+    }
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Plain)
+        .border_style(Style::default().fg(theme.text_muted));
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    for (i, (name, summary, is_selected)) in items.iter().enumerate() {
+        if i as u16 >= inner.height {
+            break;
+        }
+        let row_area = Rect {
+            x: inner.x,
+            y: inner.y + i as u16,
+            width: inner.width,
+            height: 1,
+        };
+
+        let prefix = if *is_selected { " \u{25b8} " } else { "   " };
+        let name_style = if *is_selected {
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Cyan)
+        };
+        let summary_style = Style::default().fg(theme.text_muted);
+
+        // Pad command name to fixed width for alignment
+        let name_col = format!("/{name}");
+        let padded_name = format!("{name_col:<16}");
+
+        let line = Line::from(vec![
+            Span::styled(prefix, name_style),
+            Span::styled(padded_name, name_style),
+            Span::styled(*summary, summary_style),
+        ]);
+
+        frame.render_widget(Paragraph::new(line), row_area);
     }
 }
 
