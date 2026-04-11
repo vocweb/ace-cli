@@ -29,6 +29,10 @@ pub struct ApiRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssistantEvent {
     TextDelta(String),
+    /// Summary emitted when a thinking block finishes.
+    /// Stored as a separate `ContentBlock::Text` with a marker like
+    /// "▶ Thinking (42 chars hidden)".
+    ThinkingSummary { char_count: usize },
     ToolUse {
         id: String,
         name: String,
@@ -692,6 +696,14 @@ fn build_assistant_message(
     for event in events {
         match event {
             AssistantEvent::TextDelta(delta) => text.push_str(&delta),
+            AssistantEvent::ThinkingSummary { char_count } => {
+                // Flush any pending text so the thinking marker becomes its
+                // own ContentBlock::Text (detectable by is_thinking_marker()).
+                flush_text_block(&mut text, &mut blocks);
+                blocks.push(ContentBlock::Text {
+                    text: format!("▶ Thinking ({char_count} chars hidden)"),
+                });
+            }
             AssistantEvent::ToolUse { id, name, input } => {
                 flush_text_block(&mut text, &mut blocks);
                 blocks.push(ContentBlock::ToolUse { id, name, input });

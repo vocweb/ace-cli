@@ -383,11 +383,15 @@ impl AnthropicRuntimeClient {
                 },
                 ApiStreamEvent::ContentBlockStop(_) => {
                     if in_thinking_block && self.show_thinking {
+                        let char_count = thinking_display.total_chars();
                         thinking_display
                             .finish(out)
                             .map_err(|error: std::io::Error| {
                                 RuntimeError::new(error.to_string())
                             })?;
+                        // Emit a thinking summary event so it appears in session
+                        // messages as a separate ContentBlock::Text.
+                        events.push(AssistantEvent::ThinkingSummary { char_count });
                     }
                     in_thinking_block = false;
                     block_has_thinking_summary = false;

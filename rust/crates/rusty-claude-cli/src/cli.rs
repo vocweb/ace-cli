@@ -29,6 +29,79 @@ use runtime::{
 };
 use serde_json::json;
 
+// ── Output capture ──────────────────────────────────────────────────────
+// These macros shadow the built-in `println!`/`eprintln!` within this
+// module.  When `OUTPUT_CAPTURE` holds a buffer, output is appended there
+// instead of being written to stdout/stderr.  This lets the TUI event loop
+// capture slash-command output and display it inside Zone 1 instead of
+// corrupting the ratatui alternate screen.
+
+use std::cell::RefCell;
+
+thread_local! {
+    pub(crate) static OUTPUT_CAPTURE: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// Begin capturing output.  Subsequent `println!`/`eprintln!` calls
+/// *in this module* will write to the capture buffer.
+pub(crate) fn begin_output_capture() {
+    OUTPUT_CAPTURE.with(|cell| {
+        *cell.borrow_mut() = Some(String::new());
+    });
+}
+
+/// End capture and return collected output.
+pub(crate) fn end_output_capture() -> String {
+    OUTPUT_CAPTURE.with(|cell| cell.borrow_mut().take().unwrap_or_default())
+}
+
+/// Shadow `println!` — writes to capture buffer when active, stdout otherwise.
+/// Format arguments (including `?` operators) are evaluated outside the
+/// thread-local closure so they execute in the caller's scope.
+macro_rules! println {
+    () => {{
+        crate::cli::OUTPUT_CAPTURE.with(|cell| {
+            let mut opt = cell.borrow_mut();
+            if let Some(ref mut buf) = *opt {
+                buf.push('\n');
+            } else {
+                use ::std::io::Write as _;
+                let _ = ::std::writeln!(::std::io::stdout().lock());
+            }
+        });
+    }};
+    ($($arg:tt)+) => {{
+        let __out = ::std::format!($($arg)+);
+        crate::cli::OUTPUT_CAPTURE.with(|cell| {
+            let mut opt = cell.borrow_mut();
+            if let Some(ref mut buf) = *opt {
+                buf.push_str(&__out);
+                buf.push('\n');
+            } else {
+                use ::std::io::Write as _;
+                let _ = ::std::writeln!(::std::io::stdout().lock(), "{__out}");
+            }
+        });
+    }};
+}
+
+/// Shadow `eprintln!` — writes to capture buffer when active, stderr otherwise.
+macro_rules! eprintln {
+    ($($arg:tt)+) => {{
+        let __out = ::std::format!($($arg)+);
+        crate::cli::OUTPUT_CAPTURE.with(|cell| {
+            let mut opt = cell.borrow_mut();
+            if let Some(ref mut buf) = *opt {
+                buf.push_str(&__out);
+                buf.push('\n');
+            } else {
+                use ::std::io::Write as _;
+                let _ = ::std::writeln!(::std::io::stderr().lock(), "{__out}");
+            }
+        });
+    }};
+}
+
 pub(crate) struct LiveCli {
     pub(crate) model: String,
     pub(crate) allowed_tools: Option<AllowedToolSet>,
@@ -223,6 +296,32 @@ impl LiveCli {
                     TerminalRenderer::new().color_theme(),
                     &mut stdout,
                 )?;
+                Err(Box::new(error))
+            }
+        }
+    }
+
+    /// Run a turn with no raw output to stdout.
+    ///
+    /// Used by TUI mode where ratatui owns the alternate screen — raw ANSI
+    /// from the streaming API would corrupt the display. The caller is
+    /// responsible for rendering the session messages afterwards.
+    pub(crate) fn run_turn_quiet(&mut self, input: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let (mut runtime, hook_abort_monitor) = self.prepare_turn_runtime(false)?;
+        let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
+        let result = runtime.run_turn(input, Some(&mut permission_prompter));
+        hook_abort_monitor.stop();
+        match result {
+            Ok(summary) => {
+                self.replace_runtime(runtime)?;
+                if let Some(_event) = summary.auto_compaction {
+                    // TUI caller can display compaction notice via Zone 1
+                }
+                self.persist_session()?;
+                Ok(())
+            }
+            Err(error) => {
+                runtime.shutdown_plugins()?;
                 Err(Box::new(error))
             }
         }

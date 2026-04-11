@@ -1213,6 +1213,12 @@ impl ThinkingDisplay {
         Ok(())
     }
 
+    /// Total character count across all accumulated thinking lines.
+    pub fn total_chars(&self) -> usize {
+        let line_chars: usize = self.lines.iter().map(|l| l.len()).sum();
+        line_chars + self.current_line.len()
+    }
+
     /// Clear the thinking display area and reset state.
     pub fn finish(&mut self, out: &mut (dyn Write + '_)) -> io::Result<()> {
         if self.rendered_line_count > 0 {

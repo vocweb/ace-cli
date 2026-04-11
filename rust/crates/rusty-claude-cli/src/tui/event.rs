@@ -174,10 +174,30 @@ pub(crate) fn run_tui_repl(
                                     .add_modifier(ratatui::style::Modifier::BOLD),
                             );
 
-                            // Handle slash commands synchronously
+                            // Handle slash commands synchronously.
+                            // Capture stdout/stderr output via the cli module's
+                            // shadowed println!/eprintln! macros so the text
+                            // lands in Zone 1 instead of corrupting the ratatui
+                            // alternate screen.
                             let handled = match SlashCommand::parse(&trimmed) {
                                 Ok(Some(command)) => {
+                                    crate::cli::begin_output_capture();
                                     let _ = cli.handle_repl_command(command);
+                                    let captured = crate::cli::end_output_capture();
+
+                                    if !captured.is_empty() {
+                                        for line in captured.lines() {
+                                            app.push_text(
+                                                line.to_string(),
+                                                RStyle::default().fg(RColor::White),
+                                            );
+                                        }
+                                        app.push_text(String::new(), RStyle::default());
+                                    }
+
+                                    // Sync HUD state after command (model may have changed)
+                                    app.hud.model_name.clone_from(&cli.model);
+
                                     true
                                 }
                                 Ok(None) => false,
@@ -237,9 +257,11 @@ pub(crate) fn run_tui_repl(
                                 cli.record_prompt_history(&trimmed);
 
                                 // Run the turn on the main thread (blocking).
-                                // run_turn() writes ANSI output to the alternate screen buffer;
-                                // the terminal.draw() below will repaint over it completely.
-                                let turn_result = cli.run_turn(&trimmed);
+                                // Use run_turn_quiet() which sets emit_output=false
+                                // so no raw ANSI is written to the alternate screen.
+                                // All content is rendered into Zone 1 afterwards by
+                                // render_turn_messages().
+                                let turn_result = cli.run_turn_quiet(&trimmed);
 
                                 // Remove the spinner line.
                                 if spinner_line_idx < app.content_lines.len() {
@@ -254,47 +276,24 @@ pub(crate) fn run_tui_repl(
                                         // Update HUD after turn
                                         app.hud.turn_start = None;
                                         app.hud.refresh_git();
+                                        app.hud.model_name.clone_from(&cli.model);
                                         if let Some(usage) = cli.cumulative_token_usage() {
                                             let total = u64::from(usage.input_tokens)
                                                 + u64::from(usage.output_tokens);
                                             app.hud.update_tokens(total, app.hud.tokens_max);
                                         }
 
-                                        // Extract new messages from session and render to Zone 1.
+                                        // Extract new messages from session and
+                                        // render to Zone 1 with clear visual
+                                        // hierarchy.
                                         let renderer = TerminalRenderer::new();
                                         let messages = &cli.runtime.session().messages;
-                                        for msg in messages.iter().skip(msg_count_before) {
-                                            for block in &msg.blocks {
-                                                match block {
-                                                    ContentBlock::Text { text } => {
-                                                        let lines =
-                                                            renderer.render_markdown_to_lines(text);
-                                                        app.push_content(lines);
-                                                    }
-                                                    ContentBlock::ToolUse {
-                                                        name, input, ..
-                                                    } => {
-                                                        let lines = TerminalRenderer::format_tool_start_lines(
-                                                            name, input,
-                                                        );
-                                                        app.push_content(lines);
-                                                    }
-                                                    ContentBlock::ToolResult {
-                                                        tool_name,
-                                                        output,
-                                                        is_error,
-                                                        ..
-                                                    } => {
-                                                        let lines = TerminalRenderer::format_tool_result_lines(
-                                                            tool_name, output, *is_error,
-                                                        );
-                                                        app.push_content(lines);
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        app.push_text(String::new(), RStyle::default());
+                                        render_turn_messages(
+                                            &mut app,
+                                            &renderer,
+                                            messages,
+                                            msg_count_before,
+                                        );
                                     }
                                     Err(error) => {
                                         app.push_text(
@@ -338,4 +337,100 @@ pub(crate) fn run_tui_repl(
 
     restore_terminal()?;
     Ok(())
+}
+
+// ── Post-turn message rendering ──────────────────────────────────────────
+
+use runtime::MessageRole;
+
+/// Returns `true` if `text` is a thinking-block summary marker emitted by
+/// the API client (e.g. "▶ Thinking (42 chars hidden)").
+fn is_thinking_marker(text: &str) -> bool {
+    let t = text.trim();
+    t.starts_with("▶ Thinking") || t.starts_with("▸ Thinking")
+}
+
+/// Render session messages added during a turn into Zone 1 with clear
+/// visual hierarchy:
+///
+/// - **Assistant text** → rendered as markdown (the main response).
+/// - **Thinking markers** → rendered dimmed and collapsed.
+/// - **Tool calls** → shown as a single compact line (no raw JSON).
+/// - **Tool results** → errors are shown; successes are collapsed.
+fn render_turn_messages(
+    app: &mut TuiApp,
+    renderer: &TerminalRenderer,
+    messages: &[runtime::ConversationMessage],
+    skip: usize,
+) {
+    use ratatui::prelude::{Color as RColor, Line as RLine, Modifier, Span, Style as RStyle};
+
+    let theme = ClaudeTheme::default();
+
+    for msg in messages.iter().skip(skip) {
+        // Add a subtle role separator for assistant messages.
+        if msg.role == MessageRole::Assistant {
+            app.push_content(vec![RLine::from(Span::styled(
+                "  ── assistant ──────────────────────────────",
+                RStyle::default().fg(theme.text_muted),
+            ))]);
+        }
+
+        for block in &msg.blocks {
+            match block {
+                ContentBlock::Text { text } => {
+                    if is_thinking_marker(text) {
+                        // Render thinking markers in a collapsed, dimmed style.
+                        app.push_content(vec![RLine::from(Span::styled(
+                            format!("  {}", text.trim()),
+                            RStyle::default()
+                                .fg(theme.text_muted)
+                                .add_modifier(Modifier::DIM),
+                        ))]);
+                    } else {
+                        // Normal assistant text — render as markdown.
+                        let lines = renderer.render_markdown_to_lines(text);
+                        app.push_content(lines);
+                    }
+                }
+                ContentBlock::ToolUse { name, .. } => {
+                    // Compact tool-call indicator: just the name, no raw JSON.
+                    app.push_content(vec![RLine::from(vec![
+                        Span::styled("  ▸ ", RStyle::default().fg(theme.brand)),
+                        Span::styled(
+                            name.clone(),
+                            RStyle::default()
+                                .fg(RColor::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                    ])]);
+                }
+                ContentBlock::ToolResult {
+                    tool_name,
+                    output,
+                    is_error,
+                    ..
+                } => {
+                    if *is_error {
+                        // Show errors — they matter to the user.
+                        let lines =
+                            TerminalRenderer::format_tool_result_lines(tool_name, output, true);
+                        app.push_content(lines);
+                    } else {
+                        // Collapse successful results to a single check mark.
+                        app.push_content(vec![RLine::from(vec![
+                            Span::styled("  ✓ ", RStyle::default().fg(theme.success)),
+                            Span::styled(
+                                tool_name.clone(),
+                                RStyle::default().fg(theme.text_secondary),
+                            ),
+                        ])]);
+                    }
+                }
+            }
+        }
+    }
+
+    // Blank line after the response for spacing.
+    app.push_text(String::new(), ratatui::style::Style::default());
 }
