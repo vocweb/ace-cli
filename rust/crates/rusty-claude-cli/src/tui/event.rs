@@ -4,16 +4,23 @@ use crate::args::{resolve_repl_model, AllowedToolSet, CliOutputFormat};
 use crate::cli::LiveCli;
 use crate::render::TerminalRenderer;
 use crate::repl::{enforce_broad_cwd_policy, run_stale_base_preflight};
-use crate::tui::app::{init_terminal, restore_terminal, TuiApp};
+use crate::tui::app::{init_terminal, restore_terminal, TuiApp, TuiMode};
 use crate::tui::input::InputAction;
+use crate::tui::spinner::{ShimmerState, SpinnerState};
 use commands::SlashCommand;
 use runtime::{ContentBlock, PermissionMode};
 
 /// TUI REPL mode: ratatui alternate screen with 3-zone layout (content, input, HUD footer).
 ///
-/// Uses a screen-swap strategy during turn execution: temporarily exits the
-/// alternate screen to use normal stdout for streaming output, then re-enters
-/// the TUI with the HUD updated.
+/// Stays in the alternate screen throughout the session. During turn execution
+/// a spinner is rendered, and once the turn completes the TUI is repainted
+/// with the new session messages. The turn runs on the main thread (keeping the
+/// `LiveCli` ownership simple), while the spinner frame is drawn immediately
+/// before blocking.
+///
+/// Note: `cli.run_turn()` writes ANSI output directly to stdout (the alternate
+/// screen buffer) while it executes. The subsequent `terminal.draw()` call
+/// repaints the full screen, overwriting any stray output.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_tui_repl(
     model: String,
@@ -43,6 +50,7 @@ pub(crate) fn run_tui_repl(
 
     // Initialise TUI
     let mut terminal = init_terminal()?;
+
     // Install panic hook to always restore terminal
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
@@ -77,6 +85,22 @@ pub(crate) fn run_tui_repl(
         if event::poll(Duration::from_millis(33))? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    // Ctrl+C always works — quit cleanly
+                    if key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(KeyModifiers::CONTROL)
+                    {
+                        cli.persist_session()?;
+                        app.should_quit = true;
+                        continue;
+                    }
+
+                    // Ignore input while streaming (turn is running on main thread,
+                    // so this branch is actually unreachable during streaming — kept
+                    // for correctness when mode is checked outside the turn loop).
+                    if app.mode == TuiMode::Streaming {
+                        continue;
+                    }
+
                     // PageUp/PageDown for scrolling Zone 1
                     match (key.code, key.modifiers) {
                         (KeyCode::PageUp, _) => {
@@ -110,11 +134,7 @@ pub(crate) fn run_tui_repl(
                                     .add_modifier(ratatui::style::Modifier::BOLD),
                             );
 
-                            // --- Screen swap: leave TUI for turn execution ---
-                            restore_terminal()?;
-                            println!(); // spacing
-
-                            // Handle slash commands
+                            // Handle slash commands synchronously
                             let handled = match SlashCommand::parse(&trimmed) {
                                 Ok(Some(command)) => {
                                     let _ = cli.handle_repl_command(command);
@@ -122,17 +142,74 @@ pub(crate) fn run_tui_repl(
                                 }
                                 Ok(None) => false,
                                 Err(error) => {
-                                    eprintln!("{error}");
+                                    app.push_text(
+                                        format!("Error: {error}"),
+                                        RStyle::default().fg(RColor::Red),
+                                    );
                                     true
                                 }
                             };
 
                             if !handled {
-                                // Run the turn (streams to stdout normally)
+                                // Switch to Streaming mode and draw the spinner frame
+                                // before blocking on the turn.
+                                app.mode = TuiMode::Streaming;
                                 app.hud.start_turn();
+
+                                // Inject a spinner line into Zone 1 that will be visible
+                                // during the turn (and overwritten afterwards).
+                                let spinner_line_idx = app.content_lines.len();
+                                let mut shimmer = ShimmerState::new();
+                                let spinner = SpinnerState::new();
+                                app.content_lines.push(ratatui::text::Line::from(
+                                    ratatui::text::Span::styled(
+                                        format!(
+                                            "  {} {}…",
+                                            shimmer.current_verb(),
+                                            spinner.current_char()
+                                        ),
+                                        RStyle::default().fg(shimmer.current_color()),
+                                    ),
+                                ));
+                                if app.auto_scroll {
+                                    app.scroll_to_bottom();
+                                }
+
+                                // Draw the spinner frame so the user sees it immediately.
+                                terminal.draw(|frame| app.render(frame))?;
+
+                                // Update shimmer state for the stored line (cosmetic only —
+                                // the turn runs synchronously so we can't animate further).
+                                shimmer.tick();
+                                if spinner_line_idx < app.content_lines.len() {
+                                    app.content_lines[spinner_line_idx] =
+                                        ratatui::text::Line::from(ratatui::text::Span::styled(
+                                            format!(
+                                                "  {} {}…",
+                                                shimmer.current_verb(),
+                                                spinner.current_char()
+                                            ),
+                                            RStyle::default().fg(shimmer.current_color()),
+                                        ));
+                                }
+
                                 let msg_count_before = cli.runtime.session().messages.len();
                                 cli.record_prompt_history(&trimmed);
-                                match cli.run_turn(&trimmed) {
+
+                                // Run the turn on the main thread (blocking).
+                                // run_turn() writes ANSI output to the alternate screen buffer;
+                                // the terminal.draw() below will repaint over it completely.
+                                let turn_result = cli.run_turn(&trimmed);
+
+                                // Remove the spinner line.
+                                if spinner_line_idx < app.content_lines.len() {
+                                    app.content_lines.remove(spinner_line_idx);
+                                }
+
+                                // Switch back to Input mode.
+                                app.mode = TuiMode::Input;
+
+                                match turn_result {
                                     Ok(()) => {
                                         // Update HUD after turn
                                         app.hud.turn_start = None;
@@ -143,9 +220,7 @@ pub(crate) fn run_tui_repl(
                                             app.hud.update_tokens(total, app.hud.tokens_max);
                                         }
 
-                                        // Extract new messages from session and
-                                        // render them into Zone 1 so they persist
-                                        // across the alternate-screen swap.
+                                        // Extract new messages from session and render to Zone 1.
                                         let renderer = TerminalRenderer::new();
                                         let messages = &cli.runtime.session().messages;
                                         for msg in messages.iter().skip(msg_count_before) {
@@ -159,10 +234,9 @@ pub(crate) fn run_tui_repl(
                                                     ContentBlock::ToolUse {
                                                         name, input, ..
                                                     } => {
-                                                        let lines =
-                                                            TerminalRenderer::format_tool_start_lines(
-                                                                name, input,
-                                                            );
+                                                        let lines = TerminalRenderer::format_tool_start_lines(
+                                                            name, input,
+                                                        );
                                                         app.push_content(lines);
                                                     }
                                                     ContentBlock::ToolResult {
@@ -171,10 +245,9 @@ pub(crate) fn run_tui_repl(
                                                         is_error,
                                                         ..
                                                     } => {
-                                                        let lines =
-                                                            TerminalRenderer::format_tool_result_lines(
-                                                                tool_name, output, *is_error,
-                                                            );
+                                                        let lines = TerminalRenderer::format_tool_result_lines(
+                                                            tool_name, output, *is_error,
+                                                        );
                                                         app.push_content(lines);
                                                     }
                                                 }
@@ -185,20 +258,17 @@ pub(crate) fn run_tui_repl(
                                     }
                                     Err(error) => {
                                         app.push_text(
-                                            format!("❌ Error: {error}"),
+                                            format!("Error: {error}"),
                                             RStyle::default().fg(RColor::Red),
                                         );
                                     }
                                 }
-                            }
 
-                            // Refresh completions after turn
-                            if let Ok(candidates) = cli.repl_completion_candidates() {
-                                app.input.set_completions(candidates);
+                                // Refresh completions after turn
+                                if let Ok(candidates) = cli.repl_completion_candidates() {
+                                    app.input.set_completions(candidates);
+                                }
                             }
-
-                            // --- Re-enter TUI ---
-                            terminal = init_terminal()?;
                         }
                         InputAction::Exit => {
                             cli.persist_session()?;
@@ -208,7 +278,9 @@ pub(crate) fn run_tui_repl(
                     }
                 }
                 Event::Paste(text) => {
-                    app.input.handle_paste(text);
+                    if app.mode != TuiMode::Streaming {
+                        app.input.handle_paste(text);
+                    }
                 }
                 Event::Mouse(mouse) => match mouse.kind {
                     crossterm::event::MouseEventKind::ScrollUp => app.scroll_up(3),

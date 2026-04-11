@@ -16,6 +16,17 @@ use crate::tui::input::TuiInput;
 
 const MAX_CONTENT_LINES: usize = 10_000;
 
+/// Mode the TUI is currently operating in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TuiMode {
+    /// Normal input mode — user can type.
+    Input,
+    /// Receiving AI response; input is disabled, spinner is shown.
+    Streaming,
+    /// Waiting for a permission response from the user.
+    Permission,
+}
+
 pub struct TuiApp {
     // Zone 1: Content
     pub content_lines: Vec<Line<'static>>,
@@ -30,6 +41,8 @@ pub struct TuiApp {
 
     // App state
     pub should_quit: bool,
+    /// Current interaction mode.
+    pub mode: TuiMode,
 }
 
 impl TuiApp {
@@ -42,6 +55,7 @@ impl TuiApp {
             input: TuiInput::new(),
             hud: HudState::new(model_name, project_path),
             should_quit: false,
+            mode: TuiMode::Input,
         }
     }
 
@@ -121,20 +135,32 @@ impl TuiApp {
 
     /// Render the input prompt (Zone 2).
     fn render_input(&self, frame: &mut Frame, area: Rect) {
-        let display_text = self.input.display_text();
-        let prompt_text = format!("> {display_text}");
-        let paragraph = Paragraph::new(prompt_text);
-        frame.render_widget(paragraph, area);
+        match self.mode {
+            TuiMode::Streaming => {
+                // Show a "processing" indicator instead of the input box.
+                let paragraph = Paragraph::new(ratatui::text::Span::styled(
+                    "  Processing…  (Ctrl+C to cancel)",
+                    Style::default().fg(ratatui::style::Color::DarkGray),
+                ));
+                frame.render_widget(paragraph, area);
+            }
+            _ => {
+                let display_text = self.input.display_text();
+                let prompt_text = format!("> {display_text}");
+                let paragraph = Paragraph::new(prompt_text);
+                frame.render_widget(paragraph, area);
 
-        // Set cursor position
-        // The prompt prefix "> " is 2 chars wide
-        let cursor_x = self.input.visible_cursor_x() + 2; // +2 for "> "
-        let cursor_y = self.input.visible_cursor_y();
+                // Set cursor position
+                // The prompt prefix "> " is 2 chars wide
+                let cursor_x = self.input.visible_cursor_x() + 2; // +2 for "> "
+                let cursor_y = self.input.visible_cursor_y();
 
-        frame.set_cursor_position(Position::new(
-            area.x + cursor_x as u16,
-            area.y + cursor_y as u16,
-        ));
+                frame.set_cursor_position(Position::new(
+                    area.x + cursor_x as u16,
+                    area.y + cursor_y as u16,
+                ));
+            }
+        }
     }
 
     /// Render the HUD footer (Zone 3).
@@ -188,6 +214,24 @@ mod tests {
         assert_eq!(app.scroll_offset, 0);
         assert!(app.auto_scroll);
         assert!(!app.should_quit);
+        assert_eq!(app.mode, TuiMode::Input);
+    }
+
+    #[test]
+    fn test_tui_mode_default_is_input() {
+        let app = TuiApp::new("claude-3".to_string(), "/tmp".to_string());
+        assert_eq!(app.mode, TuiMode::Input);
+    }
+
+    #[test]
+    fn test_tui_mode_transitions() {
+        let mut app = TuiApp::new("claude-3".to_string(), "/tmp".to_string());
+        app.mode = TuiMode::Streaming;
+        assert_eq!(app.mode, TuiMode::Streaming);
+        app.mode = TuiMode::Permission;
+        assert_eq!(app.mode, TuiMode::Permission);
+        app.mode = TuiMode::Input;
+        assert_eq!(app.mode, TuiMode::Input);
     }
 
     #[test]
