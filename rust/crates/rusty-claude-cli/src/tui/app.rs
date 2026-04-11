@@ -90,7 +90,7 @@ impl TuiApp {
 
     /// Render the 3-zone layout into the given frame.
     pub fn render(&self, frame: &mut Frame) {
-        let input_height = self.input.display_lines() as u16 + 1; // +1 for prompt prefix line
+        let input_height = self.input.display_lines() as u16 + 2; // +2 for border
         let hud_height: u16 = if frame.area().width < 60 { 1 } else { 2 };
 
         let chunks = Layout::vertical([
@@ -135,30 +135,69 @@ impl TuiApp {
 
     /// Render the input prompt (Zone 2).
     fn render_input(&self, frame: &mut Frame, area: Rect) {
+        use ratatui::widgets::{Block, BorderType, Borders};
+
+        let theme = crate::tui::theme::ClaudeTheme::default();
+
+        // Border color based on mode
+        let border_color = match self.mode {
+            TuiMode::Input => {
+                // Shimmer will be added later; use idle border color for now
+                theme.input_border
+            }
+            TuiMode::Streaming => theme.text_muted,
+            TuiMode::Permission => theme.permission,
+        };
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(border_color));
+
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
         match self.mode {
             TuiMode::Streaming => {
-                // Show a "processing" indicator instead of the input box.
-                let paragraph = Paragraph::new(ratatui::text::Span::styled(
+                // Show a "processing" indicator inside the bordered box.
+                let paragraph = Paragraph::new(Span::styled(
                     "  Processing…  (Ctrl+C to cancel)",
-                    Style::default().fg(ratatui::style::Color::DarkGray),
+                    Style::default().fg(theme.text_muted),
                 ));
-                frame.render_widget(paragraph, area);
+                frame.render_widget(paragraph, inner);
             }
             _ => {
+                // Prefix color based on input content
+                let prefix_color = if self.input.buffer.starts_with('/') {
+                    Color::Cyan
+                } else if self.input.buffer.starts_with('!') {
+                    theme.bash_border
+                } else {
+                    theme.text_primary
+                };
+
                 let display_text = self.input.display_text();
-                let prompt_text = format!("> {display_text}");
-                let paragraph = Paragraph::new(prompt_text);
-                frame.render_widget(paragraph, area);
 
-                // Set cursor position
-                // The prompt prefix "> " is 2 chars wide
-                let cursor_x = self.input.visible_cursor_x() + 2; // +2 for "> "
-                let cursor_y = self.input.visible_cursor_y();
+                let paragraph = Paragraph::new(Line::from(vec![
+                    Span::styled(
+                        "> ",
+                        Style::default()
+                            .fg(prefix_color)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(display_text, Style::default().fg(theme.text_primary)),
+                ]));
+                frame.render_widget(paragraph, inner);
 
-                frame.set_cursor_position(Position::new(
-                    area.x + cursor_x as u16,
-                    area.y + cursor_y as u16,
-                ));
+                // Set cursor position (inside the border)
+                if self.mode == TuiMode::Input {
+                    let cursor_x = self.input.visible_cursor_x() + 2; // +2 for "> "
+                    let cursor_y = self.input.visible_cursor_y();
+                    frame.set_cursor_position(Position::new(
+                        inner.x + cursor_x as u16,
+                        inner.y + cursor_y as u16,
+                    ));
+                }
             }
         }
     }
@@ -296,6 +335,14 @@ mod tests {
         app.push_text("Hello".to_string(), Style::default());
         app.scroll_up(100);
         assert_eq!(app.scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_input_height_with_border() {
+        let app = TuiApp::new("claude-3".to_string(), "/tmp/project".to_string());
+        // 1 line input + 2 border lines = 3
+        let input_height = app.input.display_lines() as u16 + 2;
+        assert_eq!(input_height, 3);
     }
 
     #[test]
