@@ -7,8 +7,54 @@ use crate::repl::{enforce_broad_cwd_policy, run_stale_base_preflight};
 use crate::tui::app::{init_terminal, restore_terminal, TuiApp, TuiMode};
 use crate::tui::input::InputAction;
 use crate::tui::spinner::{ShimmerState, SpinnerState};
+use crate::tui::theme::ClaudeTheme;
 use commands::SlashCommand;
+use ratatui::{
+    style::Style,
+    text::{Line, Span},
+};
 use runtime::{ContentBlock, PermissionMode};
+
+/// Render a Claude Code style startup banner.
+///
+/// ```text
+/// ╭──────────────────────────────────────────────╮
+/// │  ACE CLI v0.1.0                              │
+/// │  Model: claude-opus-4-6                      │
+/// │  Session: abc123                             │
+/// ╰──────────────────────────────────────────────╯
+/// ```
+fn render_startup_banner(
+    model: &str,
+    session_id: &str,
+    width: u16,
+    theme: &ClaudeTheme,
+) -> Vec<Line<'static>> {
+    let w = width as usize;
+    let border_color = theme.brand;
+
+    let top = format!("╭{}╮", "─".repeat(w.saturating_sub(2)));
+    let bot = format!("╰{}╯", "─".repeat(w.saturating_sub(2)));
+
+    let version = env!("CARGO_PKG_VERSION");
+    let line1 = format!("  ACE CLI v{version}");
+    let line2 = format!("  Model: {model}");
+    let line3 = format!("  Session: {session_id}");
+
+    let fmt_line = |text: String| -> Line<'static> {
+        let padded = format!("│{:<width$}│", text, width = w.saturating_sub(2));
+        Line::from(Span::styled(padded, Style::default().fg(border_color)))
+    };
+
+    vec![
+        Line::from(Span::styled(top, Style::default().fg(border_color))),
+        fmt_line(line1),
+        fmt_line(line2),
+        fmt_line(line3),
+        Line::from(Span::styled(bot, Style::default().fg(border_color))),
+        Line::from(""),
+    ]
+}
 
 /// TUI REPL mode: ratatui alternate screen with 3-zone layout (content, input, HUD footer).
 ///
@@ -67,15 +113,9 @@ pub(crate) fn run_tui_repl(
     }
 
     // Push startup banner into Zone 1
-    app.push_text(
-        format!("🐙 ACE CLI — {}", cli.model),
-        RStyle::default().fg(RColor::Cyan),
-    );
-    app.push_text(
-        format!("  Session: {}", cli.session.id),
-        RStyle::default().fg(RColor::DarkGray),
-    );
-    app.push_text(String::new(), RStyle::default());
+    let theme = ClaudeTheme::default();
+    let banner = render_startup_banner(&cli.model, &cli.session.id, 50, &theme);
+    app.push_content(banner);
 
     loop {
         // Draw TUI

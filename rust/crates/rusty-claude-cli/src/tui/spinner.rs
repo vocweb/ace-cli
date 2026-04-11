@@ -121,6 +121,26 @@ impl Default for ToolSpinnerState {
     }
 }
 
+/// Render a thinking indicator line with spinner and shimmer.
+///
+/// Example: ` ✻ Thinking...`
+pub fn render_thinking_line(
+    spinner: &SpinnerState,
+    shimmer: &ShimmerState,
+) -> ratatui::text::Line<'static> {
+    use ratatui::{
+        style::Style,
+        text::{Line, Span},
+    };
+    let ch = spinner.current_char();
+    let color = shimmer.current_color();
+    let verb = shimmer.current_verb();
+    Line::from(Span::styled(
+        format!(" {ch} {verb}..."),
+        Style::default().fg(color),
+    ))
+}
+
 /// Blinking cursor at end of streaming text.
 pub struct StreamCursor {
     pub visible: bool,
@@ -231,6 +251,15 @@ mod tests {
         assert!(!c.visible);
         c.toggle();
         assert!(c.visible);
+    }
+
+    #[test]
+    fn test_render_thinking_line() {
+        let spinner = SpinnerState::new();
+        let shimmer = ShimmerState::new();
+        let line = render_thinking_line(&spinner, &shimmer);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(text.contains("Thinking"));
     }
 
     // Suppress unused import warning for Color in tests
