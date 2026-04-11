@@ -327,16 +327,14 @@ pub(crate) fn session_clear_backup_path(session_path: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use runtime::Session;
-    use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         crate::test_env_lock()
     }
 
-    fn cwd_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+    fn cwd_lock() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_cwd_lock()
     }
 
     fn temp_workspace(label: &str) -> std::path::PathBuf {
@@ -349,7 +347,7 @@ mod tests {
 
     #[test]
     fn managed_sessions_default_to_jsonl_and_resolve_legacy_json() {
-        let _guard = cwd_lock().lock().expect("cwd lock");
+        let _guard = cwd_lock();
         let workspace = temp_workspace("session-resolution");
         std::fs::create_dir_all(&workspace).expect("workspace should create");
         let previous = std::env::current_dir().expect("cwd");
@@ -387,7 +385,7 @@ mod tests {
 
     #[test]
     fn latest_session_alias_resolves_most_recent_managed_session() {
-        let _guard = cwd_lock().lock().expect("cwd lock");
+        let _guard = cwd_lock();
         let workspace = temp_workspace("latest-session-alias");
         std::fs::create_dir_all(&workspace).expect("workspace should create");
         let previous = std::env::current_dir().expect("cwd");
