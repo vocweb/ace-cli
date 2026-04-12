@@ -108,9 +108,9 @@ impl TuiApp {
             // 4-zone layout: content, input, dropdown, HUD
             let chunks = Layout::vertical([
                 Constraint::Min(3),                  // Zone 1: Content
-                Constraint::Length(input_height),     // Zone 2: Input
-                Constraint::Length(dropdown_height),  // Zone 2.5: Dropdown
-                Constraint::Length(hud_height),       // Zone 3: HUD
+                Constraint::Length(input_height),    // Zone 2: Input
+                Constraint::Length(dropdown_height), // Zone 2.5: Dropdown
+                Constraint::Length(hud_height),      // Zone 3: HUD
             ])
             .split(frame.area());
 
