@@ -160,8 +160,41 @@ pub(crate) fn run_tui_repl(
                         _ => {}
                     }
 
+                    // When dropdown is open, intercept navigation keys
+                    if app.dropdown.is_open() {
+                        match key.code {
+                            KeyCode::Down => {
+                                app.dropdown.move_down();
+                                continue;
+                            }
+                            KeyCode::Up => {
+                                app.dropdown.move_up();
+                                continue;
+                            }
+                            KeyCode::Enter => {
+                                if let Some(cmd) = app.dropdown.confirm_selection() {
+                                    app.input.buffer = cmd;
+                                    app.input.cursor = app.input.buffer.len();
+                                    // Don't submit — just fill the input
+                                }
+                                continue;
+                            }
+                            KeyCode::Esc => {
+                                app.dropdown.dismiss();
+                                continue;
+                            }
+                            _ => {
+                                // All other keys (typing, backspace, etc.) fall through
+                                // to input.handle_key(), then dropdown updates via Changed
+                            }
+                        }
+                    }
+
                     match app.input.handle_key(key) {
                         InputAction::Submit(text) => {
+                            // Close dropdown on submit
+                            app.dropdown.dismiss();
+
                             let trimmed = text.trim().to_string();
                             if trimmed.is_empty() {
                                 continue;
@@ -319,7 +352,10 @@ pub(crate) fn run_tui_repl(
                             cli.persist_session()?;
                             app.should_quit = true;
                         }
-                        InputAction::Changed | InputAction::None => {}
+                        InputAction::Changed => {
+                            app.dropdown.update_filter(&app.input.buffer);
+                        }
+                        InputAction::None => {}
                     }
                 }
                 Event::Paste(text) => {
