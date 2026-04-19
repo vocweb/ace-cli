@@ -1,7 +1,7 @@
 use std::io;
 
 use crossterm::{
-    event::{DisableBracketedPaste, EnableBracketedPaste},
+    event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
@@ -260,7 +260,12 @@ impl TuiApp {
 /// Initialize the terminal for TUI mode: raw mode, alternate screen, bracketed paste.
 pub fn init_terminal() -> io::Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode()?;
-    crossterm::execute!(io::stdout(), EnterAlternateScreen, EnableBracketedPaste)?;
+    crossterm::execute!(
+        io::stdout(),
+        EnterAlternateScreen,
+        EnableBracketedPaste,
+        EnableMouseCapture
+    )?;
     let backend = CrosstermBackend::new(io::stdout());
     Terminal::new(backend)
 }
@@ -268,7 +273,12 @@ pub fn init_terminal() -> io::Result<Terminal<CrosstermBackend<io::Stdout>>> {
 /// Restore the terminal to its original state.
 pub fn restore_terminal() -> io::Result<()> {
     disable_raw_mode()?;
-    crossterm::execute!(io::stdout(), LeaveAlternateScreen, DisableBracketedPaste)?;
+    crossterm::execute!(
+        io::stdout(),
+        LeaveAlternateScreen,
+        DisableBracketedPaste,
+        DisableMouseCapture
+    )?;
     Ok(())
 }
 

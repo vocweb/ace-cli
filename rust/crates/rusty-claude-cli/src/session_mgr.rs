@@ -94,8 +94,8 @@ pub(crate) fn resolve_managed_session_path(
         }
     }
     // Backward compatibility: pre-isolation sessions were stored at
-    // `.claw/sessions/<id>.{jsonl,json}` without the per-workspace hash
-    // subdirectory. Walk up from `directory` to the `.claw/sessions/` root
+    // `.ace/sessions/<id>.{jsonl,json}` without the per-workspace hash
+    // subdirectory. Walk up from `directory` to the `.ace/sessions/` root
     // and try the flat layout as a fallback so users do not lose access
     // to their pre-upgrade managed sessions.
     if let Some(legacy_root) = directory
@@ -187,7 +187,7 @@ pub(crate) fn list_managed_sessions(
     collect_sessions_from_dir(&primary_dir, &mut sessions)?;
 
     // Backward compatibility: include sessions stored in the pre-isolation
-    // flat `.claw/sessions/` root so users do not lose access to existing
+    // flat `.ace/sessions/` root so users do not lose access to existing
     // managed sessions after the workspace-hashed subdirectory rollout.
     if let Some(legacy_root) = primary_dir
         .parent()
@@ -356,7 +356,7 @@ mod tests {
         let handle = create_managed_session_handle("session-alpha").expect("jsonl handle");
         assert!(handle.path.ends_with("session-alpha.jsonl"));
 
-        let legacy_path = workspace.join(".claw/sessions/legacy.json");
+        let legacy_path = workspace.join(".ace/sessions/legacy.json");
         std::fs::create_dir_all(
             legacy_path
                 .parent()

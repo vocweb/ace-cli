@@ -57,12 +57,12 @@ pub use compact::{
     get_compact_continuation_message, should_compact, CompactionConfig, CompactionResult,
 };
 pub use config::{
-    ConfigEntry, ConfigError, ConfigLoader, ConfigSource, McpConfigCollection,
+    ConfigEntry, ConfigError, ConfigLoader, ConfigSource, LocalSettingsWriter, McpConfigCollection,
     McpManagedProxyServerConfig, McpOAuthConfig, McpRemoteServerConfig, McpSdkServerConfig,
     McpServerConfig, McpStdioServerConfig, McpTransport, McpWebSocketServerConfig, OAuthConfig,
     ProviderFallbackConfig, ResolvedPermissionMode, RuntimeConfig, RuntimeFeatureConfig,
     RuntimeHookConfig, RuntimePermissionRuleConfig, RuntimePluginConfig, ScopedMcpServerConfig,
-    CLAW_SETTINGS_SCHEMA_NAME,
+    ACE_SETTINGS_SCHEMA_NAME,
 };
 pub use config_validate::{
     check_unsupported_format, format_diagnostics, validate_config_file, ConfigDiagnostic,
@@ -152,7 +152,7 @@ pub use session::{
 };
 pub use sse::{IncrementalSseParser, SseEvent};
 pub use stale_base::{
-    check_base_commit, format_stale_base_warning, read_claw_base_file, resolve_expected_base,
+    check_base_commit, format_stale_base_warning, read_ace_base_file, resolve_expected_base,
     BaseCommitSource, BaseCommitState,
 };
 pub use stale_branch::{

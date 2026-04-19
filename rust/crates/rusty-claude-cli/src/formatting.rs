@@ -197,18 +197,6 @@ pub(crate) fn parse_git_status_metadata_for(
     (project_root, branch)
 }
 
-pub(crate) fn git_output(args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(env::current_dir()?)
-        .output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(format!("git {} failed: {stderr}", args.join(" ")).into());
-    }
-    Ok(String::from_utf8(output.stdout)?)
-}
-
 pub(crate) fn git_status_ok(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
     let output = Command::new("git")
         .args(args)
@@ -483,32 +471,6 @@ pub(crate) fn format_sandbox_report(status: &SandboxStatus) -> String {
             .clone()
             .unwrap_or_else(|| "<none>".to_string()),
     )
-}
-
-pub(crate) fn format_commit_preflight_report(
-    branch: Option<&str>,
-    summary: GitWorkspaceSummary,
-) -> String {
-    format!(
-        "Commit
-  Result           ready
-  Branch           {}
-  Workspace        {}
-  Changed files    {}
-  Action           create a git commit from the current workspace changes",
-        branch.unwrap_or("unknown"),
-        summary.headline(),
-        summary.changed_files,
-    )
-}
-
-pub(crate) fn format_commit_skipped_report() -> String {
-    "Commit
-  Result           skipped
-  Reason           no workspace changes
-  Action           create a git commit from the current workspace changes
-  Next             /status to inspect context · /diff to inspect repo changes"
-        .to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -1604,47 +1566,6 @@ pub(crate) fn validate_no_args(
         .into());
     }
     Ok(())
-}
-
-pub(crate) fn format_bughunter_report(scope: Option<&str>) -> String {
-    format!(
-        "Bughunter
-  Scope            {}
-  Action           inspect the selected code for likely bugs and correctness issues
-  Output           findings should include file paths, severity, and suggested fixes",
-        scope.unwrap_or("the current repository")
-    )
-}
-
-pub(crate) fn format_ultraplan_report(task: Option<&str>) -> String {
-    format!(
-        "Ultraplan
-  Task             {}
-  Action           break work into a multi-step execution plan
-  Output           plan should cover goals, risks, sequencing, verification, and rollback",
-        task.unwrap_or("the current repo work")
-    )
-}
-
-pub(crate) fn format_pr_report(branch: &str, context: Option<&str>) -> String {
-    format!(
-        "PR
-  Branch           {branch}
-  Context          {}
-  Action           draft or create a pull request for the current branch
-  Output           title and markdown body suitable for GitHub",
-        context.unwrap_or("none")
-    )
-}
-
-pub(crate) fn format_issue_report(context: Option<&str>) -> String {
-    format!(
-        "Issue
-  Context          {}
-  Action           draft or create a GitHub issue from the current context
-  Output           title and markdown body suitable for GitHub",
-        context.unwrap_or("none")
-    )
 }
 
 pub(crate) fn write_temp_text_file(

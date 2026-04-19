@@ -42,9 +42,9 @@ pub(crate) fn enforce_broad_cwd_policy(
     if is_interactive {
         // Interactive mode: print warning and ask for confirmation
         eprintln!(
-            "Warning: claw is running from a very broad directory ({}).\n\
+            "Warning: ace is running from a very broad directory ({}).\n\
              The agent can read and search everything under this path.\n\
-             Consider running from inside your project: cd /path/to/project && claw",
+             Consider running from inside your project: cd /path/to/project && ace",
             cwd.display()
         );
         eprint!("Continue anyway? [y/N]: ");
@@ -61,10 +61,10 @@ pub(crate) fn enforce_broad_cwd_policy(
     } else {
         // Non-interactive mode: exit with error (JSON or text)
         let message = format!(
-            "claw is running from a very broad directory ({}). \
+            "ace is running from a very broad directory ({}). \
              The agent can read and search everything under this path. \
              Use --allow-broad-cwd to proceed anyway, \
-             or run from inside your project: cd /path/to/project && claw",
+             or run from inside your project: cd /path/to/project && ace",
             cwd.display()
         );
         match output_format {
@@ -111,7 +111,9 @@ pub(crate) fn run_repl(
     let resolved_model = resolve_repl_model(model);
     let mut cli = LiveCli::new(resolved_model, true, allowed_tools, permission_mode)?;
     cli.set_reasoning_effort(reasoning_effort);
-    if show_thinking {
+    let effective_show_thinking =
+        show_thinking || crate::args::config_show_thinking_for_current_dir().unwrap_or(false);
+    if effective_show_thinking {
         cli.set_show_thinking(true);
     }
     let mut editor =

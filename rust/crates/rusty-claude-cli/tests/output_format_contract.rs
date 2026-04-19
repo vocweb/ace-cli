@@ -61,7 +61,7 @@ fn inventory_commands_emit_structured_json_when_requested() {
         &[
             ("HOME", isolated_home.to_str().expect("utf8 home")),
             (
-                "CLAW_CONFIG_HOME",
+                "ACE_CONFIG_HOME",
                 isolated_config.to_str().expect("utf8 config home"),
             ),
             (
@@ -126,7 +126,7 @@ fn agents_command_emits_structured_agent_entries_when_requested() {
         &[
             ("HOME", home.to_str().expect("utf8 home")),
             (
-                "CLAW_CONFIG_HOME",
+                "ACE_CONFIG_HOME",
                 isolated_config.to_str().expect("utf8 config home"),
             ),
             (
@@ -142,12 +142,12 @@ fn agents_command_emits_structured_agent_entries_when_requested() {
     assert_eq!(parsed["summary"]["active"], 2);
     assert_eq!(parsed["summary"]["shadowed"], 1);
     assert_eq!(parsed["agents"][0]["name"], "planner");
-    assert_eq!(parsed["agents"][0]["source"]["id"], "project_claw");
+    assert_eq!(parsed["agents"][0]["source"]["id"], "project_ace");
     assert_eq!(parsed["agents"][0]["active"], true);
     assert_eq!(parsed["agents"][1]["name"], "verifier");
     assert_eq!(parsed["agents"][2]["name"], "planner");
     assert_eq!(parsed["agents"][2]["active"], false);
-    assert_eq!(parsed["agents"][2]["shadowed_by"]["id"], "project_claw");
+    assert_eq!(parsed["agents"][2]["shadowed_by"]["id"], "project_ace");
 }
 
 #[test]
@@ -286,7 +286,7 @@ fn resumed_inventory_commands_emit_structured_json_when_requested() {
         ],
         &[
             (
-                "CLAW_CONFIG_HOME",
+                "ACE_CONFIG_HOME",
                 config_home.to_str().expect("utf8 config home"),
             ),
             ("HOME", home.to_str().expect("utf8 home")),
@@ -307,7 +307,7 @@ fn resumed_inventory_commands_emit_structured_json_when_requested() {
         ],
         &[
             (
-                "CLAW_CONFIG_HOME",
+                "ACE_CONFIG_HOME",
                 config_home.to_str().expect("utf8 config home"),
             ),
             ("HOME", home.to_str().expect("utf8 home")),
@@ -363,7 +363,7 @@ fn assert_json_command(current_dir: &Path, args: &[&str]) -> Value {
 }
 
 fn assert_json_command_with_env(current_dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> Value {
-    let output = run_claw(current_dir, args, envs);
+    let output = run_ace(current_dir, args, envs);
     assert!(
         output.status.success(),
         "stdout:\n{}\n\nstderr:\n{}",
@@ -373,17 +373,17 @@ fn assert_json_command_with_env(current_dir: &Path, args: &[&str], envs: &[(&str
     serde_json::from_slice(&output.stdout).expect("stdout should be valid json")
 }
 
-fn run_claw(current_dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
+fn run_ace(current_dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ace"));
     command.current_dir(current_dir).args(args);
     for (key, value) in envs {
         command.env(key, value);
     }
-    command.output().expect("claw should launch")
+    command.output().expect("ace should launch")
 }
 
 fn write_upstream_fixture(root: &Path) -> PathBuf {
-    let upstream = root.join("claw-code");
+    let upstream = root.join("ace-code");
     let src = upstream.join("src");
     let entrypoints = src.join("entrypoints");
     fs::create_dir_all(&entrypoints).expect("upstream entrypoints dir should exist");
@@ -423,7 +423,7 @@ fn unique_temp_dir(label: &str) -> PathBuf {
         .as_millis();
     let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
-        "claw-output-format-{label}-{}-{millis}-{counter}",
+        "ace-output-format-{label}-{}-{millis}-{counter}",
         std::process::id()
     ))
 }

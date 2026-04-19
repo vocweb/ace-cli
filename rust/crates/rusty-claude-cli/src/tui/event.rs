@@ -85,7 +85,9 @@ pub(crate) fn run_tui_repl(
     let resolved_model = resolve_repl_model(model);
     let mut cli = LiveCli::new(resolved_model, true, allowed_tools, permission_mode)?;
     cli.set_reasoning_effort(reasoning_effort);
-    if show_thinking {
+    let effective_show_thinking =
+        show_thinking || crate::args::config_show_thinking_for_current_dir().unwrap_or(false);
+    if effective_show_thinking {
         cli.set_show_thinking(true);
     }
 
@@ -171,7 +173,7 @@ pub(crate) fn run_tui_repl(
                                 app.dropdown.move_up();
                                 continue;
                             }
-                            KeyCode::Enter => {
+                            KeyCode::Tab | KeyCode::Enter => {
                                 if let Some(cmd) = app.dropdown.confirm_selection() {
                                     app.input.buffer = cmd;
                                     app.input.cursor = app.input.buffer.len();

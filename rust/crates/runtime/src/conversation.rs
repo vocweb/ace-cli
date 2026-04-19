@@ -32,7 +32,9 @@ pub enum AssistantEvent {
     /// Summary emitted when a thinking block finishes.
     /// Stored as a separate `ContentBlock::Text` with a marker like
     /// "▶ Thinking (42 chars hidden)".
-    ThinkingSummary { char_count: usize },
+    ThinkingSummary {
+        char_count: usize,
+    },
     ToolUse {
         id: String,
         name: String,

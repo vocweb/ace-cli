@@ -25,7 +25,7 @@ use commands::{
 };
 use runtime::{
     format_usd, pricing_for_model, resolve_sandbox_status, CompactionConfig, ConfigLoader,
-    ConversationRuntime, PermissionMode, Session, UsageTracker,
+    ConversationRuntime, LocalSettingsWriter, PermissionMode, Session, UsageTracker,
 };
 use serde_json::json;
 
@@ -152,6 +152,15 @@ impl LiveCli {
         self.show_thinking = enabled;
         if let Some(rt) = self.runtime.runtime.as_mut() {
             rt.api_client_mut().set_show_thinking(enabled);
+        }
+    }
+
+    /// Persist a setting change to the project-local settings file.
+    fn on_setting_changed(&self, key: &str, value: serde_json::Value) {
+        let cwd = env::current_dir().unwrap_or_default();
+        let path = LocalSettingsWriter::default_path(&cwd);
+        if let Err(e) = LocalSettingsWriter::save(&path, key, value) {
+            eprintln!("warning: failed to persist setting: {e}");
         }
     }
 
@@ -405,26 +414,6 @@ impl LiveCli {
                 self.print_status();
                 false
             }
-            SlashCommand::Bughunter { scope } => {
-                self.run_bughunter(scope.as_deref())?;
-                false
-            }
-            SlashCommand::Commit => {
-                self.run_commit(None)?;
-                false
-            }
-            SlashCommand::Pr { context } => {
-                self.run_pr(context.as_deref())?;
-                false
-            }
-            SlashCommand::Issue { context } => {
-                self.run_issue(context.as_deref())?;
-                false
-            }
-            SlashCommand::Ultraplan { task } => {
-                self.run_ultraplan(task.as_deref())?;
-                false
-            }
             SlashCommand::Teleport { target } => {
                 Self::run_teleport(target.as_deref())?;
                 false
@@ -519,11 +508,6 @@ impl LiveCli {
                 println!("{}", format_cost_report(usage));
                 false
             }
-            // ── Group 1: AI-powered commands ──────────────────────
-            SlashCommand::Advisor => {
-                self.run_advisor()?;
-                false
-            }
             SlashCommand::Insights => {
                 self.run_insights()?;
                 false
@@ -532,88 +516,11 @@ impl LiveCli {
                 self.run_security_review()?;
                 false
             }
-            // ── Group 2: Registry-wiring commands ────────────────
-            SlashCommand::Team { args } => {
-                Self::handle_team_command(args.as_deref());
-                false
-            }
-            SlashCommand::Cron { args } => {
-                Self::handle_cron_command(args.as_deref());
-                false
-            }
-            // ── Group 3: Simple info commands ────────────────────
-            SlashCommand::Hooks { args } => {
-                Self::handle_hooks_command(args.as_deref())?;
-                false
-            }
-            SlashCommand::Branch { .. } => {
-                Self::handle_branch_command()?;
-                false
-            }
-            SlashCommand::AddDir { path } => {
-                Self::handle_add_dir(path.as_deref());
-                false
-            }
-            SlashCommand::Telemetry { action } => {
-                Self::handle_telemetry(action.as_deref());
-                false
-            }
-            SlashCommand::Providers => {
-                Self::handle_providers();
-                false
-            }
-            SlashCommand::Desktop => {
-                println!("Desktop app integration is not yet available. Use `ace` CLI directly.");
-                false
-            }
-            SlashCommand::Ide { .. } => {
-                println!("IDE integration is not yet available. Use `ace` CLI directly.");
-                false
-            }
-            SlashCommand::Files => {
-                Self::handle_files_command()?;
-                false
-            }
-            SlashCommand::Context { action } => {
-                self.handle_context_command(action.as_deref());
-                false
-            }
             SlashCommand::Thinking => {
                 let new_state = !self.show_thinking;
                 self.set_show_thinking(new_state);
+                self.on_setting_changed("show_thinking", serde_json::Value::Bool(new_state));
                 eprintln!("Thinking display: {}", if new_state { "on" } else { "off" });
-                false
-            }
-            // ── Still unimplemented stubs ────────────────────────
-            SlashCommand::Login
-            | SlashCommand::Logout
-            | SlashCommand::Vim
-            | SlashCommand::Upgrade
-            | SlashCommand::Share
-            | SlashCommand::Feedback
-            | SlashCommand::Fast
-            | SlashCommand::Exit
-            | SlashCommand::Summary
-            | SlashCommand::Brief
-            | SlashCommand::Stickers
-            | SlashCommand::Thinkback
-            | SlashCommand::ReleaseNotes
-            | SlashCommand::Keybindings
-            | SlashCommand::PrivacySettings
-            | SlashCommand::Plan { .. }
-            | SlashCommand::Tasks { .. }
-            | SlashCommand::Theme { .. }
-            | SlashCommand::Voice { .. }
-            | SlashCommand::Usage { .. }
-            | SlashCommand::Rename { .. }
-            | SlashCommand::Copy { .. }
-            | SlashCommand::Color { .. }
-            | SlashCommand::Effort { .. }
-            | SlashCommand::Rewind { .. }
-            | SlashCommand::Tag { .. }
-            | SlashCommand::OutputStyle { .. } => {
-                let cmd_name = command.slash_name();
-                eprintln!("{cmd_name} is not yet implemented in this build.");
                 false
             }
             SlashCommand::Unknown(name) => {
@@ -753,6 +660,7 @@ impl LiveCli {
         )?;
         self.replace_runtime(runtime)?;
         self.model.clone_from(&model);
+        self.on_setting_changed("model", serde_json::Value::String(model.clone()));
         println!(
             "{}",
             format_model_switch_report(&previous, &model, message_count)
@@ -798,6 +706,10 @@ impl LiveCli {
             None,
         )?;
         self.replace_runtime(runtime)?;
+        self.on_setting_changed(
+            "permissions",
+            serde_json::Value::String(normalized.to_string()),
+        );
         println!(
             "{}",
             format_permissions_switch_report(&previous, normalized)
@@ -1215,16 +1127,6 @@ impl LiveCli {
         self.run_internal_prompt_text_with_progress(prompt, enable_tools, None)
     }
 
-    fn run_bughunter(&self, scope: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", format_bughunter_report(scope));
-        Ok(())
-    }
-
-    fn run_ultraplan(&self, task: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", format_ultraplan_report(task));
-        Ok(())
-    }
-
     fn run_teleport(target: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         let Some(target) = target.map(str::trim).filter(|value| !value.is_empty()) else {
             println!("Usage: /teleport <symbol-or-path>");
@@ -1238,23 +1140,6 @@ impl LiveCli {
     fn run_debug_tool_call(&self, args: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         validate_no_args("/debug-tool-call", args)?;
         println!("{}", render_last_tool_debug_report(self.runtime.session())?);
-        Ok(())
-    }
-
-    fn run_commit(&mut self, args: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        validate_no_args("/commit", args)?;
-        let status = git_output(&["status", "--short", "--branch"])?;
-        let summary = parse_git_workspace_summary(Some(&status));
-        let branch = parse_git_status_branch(Some(&status));
-        if summary.is_clean() {
-            println!("{}", format_commit_skipped_report());
-            return Ok(());
-        }
-
-        println!(
-            "{}",
-            format_commit_preflight_report(branch.as_deref(), summary)
-        );
         Ok(())
     }
 
@@ -1283,43 +1168,6 @@ impl LiveCli {
              code quality, and best practices:\n\n```diff\n{diff_content}\n```"
         );
 
-        self.run_turn(&prompt)?;
-        Ok(())
-    }
-
-    fn run_pr(&self, context: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        let branch =
-            resolve_git_branch_for(&env::current_dir()?).unwrap_or_else(|| "unknown".to_string());
-        println!("{}", format_pr_report(&branch, context));
-        Ok(())
-    }
-
-    fn run_issue(&self, context: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", format_issue_report(context));
-        Ok(())
-    }
-
-    // ── Group 1: AI-powered commands ────────────────────────────
-
-    fn run_advisor(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let cwd = env::current_dir()?;
-        let file_list = std::process::Command::new("git")
-            .args(["ls-files"])
-            .current_dir(&cwd)
-            .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
-        let file_summary = truncate_for_prompt(&file_list, 8_000);
-
-        let prompt = format!(
-            "You are now in advisor mode. Analyze the following project structure and provide \
-             recommendations on architecture, code quality, potential improvements, and best \
-             practices. Do NOT make any file changes — only provide guidance.\n\n\
-             Project directory: {}\n\nFiles:\n{file_summary}",
-            cwd.display()
-        );
         self.run_turn(&prompt)?;
         Ok(())
     }
@@ -1367,233 +1215,6 @@ impl LiveCli {
         );
         self.run_turn(&prompt)?;
         Ok(())
-    }
-
-    // ── Group 2: Registry-wiring commands ───────────────────────
-
-    fn handle_team_command(args: Option<&str>) {
-        match args.map(str::trim) {
-            None | Some("list") | Some("") => {
-                println!("Team management");
-                println!("  No teams configured in this session.");
-                println!();
-                println!("Usage:");
-                println!("  /team list            List all teams");
-                println!("  /team create <name>   Create a new team");
-            }
-            Some(sub) if sub.starts_with("create ") => {
-                let name = sub.strip_prefix("create ").unwrap_or("").trim();
-                if name.is_empty() {
-                    eprintln!("Usage: /team create <name>");
-                } else {
-                    println!(
-                        "Team '{}' registered. (session-local, not yet persisted)",
-                        name
-                    );
-                }
-            }
-            Some(other) => {
-                eprintln!("Unknown team subcommand: {other}");
-                eprintln!("Usage: /team [list|create <name>]");
-            }
-        }
-    }
-
-    fn handle_cron_command(args: Option<&str>) {
-        match args.map(str::trim) {
-            None | Some("list") | Some("") => {
-                println!("Cron jobs");
-                println!("  No cron jobs configured in this session.");
-                println!();
-                println!("Usage:");
-                println!("  /cron list                      List all cron jobs");
-                println!("  /cron create <schedule> <cmd>   Create a new cron job");
-            }
-            Some(sub) if sub.starts_with("create ") => {
-                let remainder = sub.strip_prefix("create ").unwrap_or("").trim();
-                let parts: Vec<&str> = remainder.splitn(2, ' ').collect();
-                if parts.len() < 2 {
-                    eprintln!("Usage: /cron create <schedule> <command>");
-                } else {
-                    println!(
-                        "Cron job registered: schedule='{}' command='{}' (session-local, not yet persisted)",
-                        parts[0], parts[1]
-                    );
-                }
-            }
-            Some(other) => {
-                eprintln!("Unknown cron subcommand: {other}");
-                eprintln!("Usage: /cron [list|create <schedule> <cmd>]");
-            }
-        }
-    }
-
-    // ── Group 3: Simple info commands ───────────────────────────
-
-    fn handle_hooks_command(args: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        let _ = args; // reserved for future subcommands
-        let cwd = env::current_dir()?;
-        let loader = ConfigLoader::default_for(&cwd);
-        let config = loader
-            .load()
-            .unwrap_or_else(|_| runtime::RuntimeConfig::empty());
-        let hooks = config.hooks();
-        let pre = hooks.pre_tool_use();
-        let post = hooks.post_tool_use();
-        let fail = hooks.post_tool_use_failure();
-
-        if pre.is_empty() && post.is_empty() && fail.is_empty() {
-            println!("No hooks configured.");
-            println!("Add hooks in your settings.json to run commands on lifecycle events.");
-        } else {
-            println!("Configured hooks:");
-            if !pre.is_empty() {
-                println!("  pre_tool_use:");
-                for cmd in pre {
-                    println!("    - {cmd}");
-                }
-            }
-            if !post.is_empty() {
-                println!("  post_tool_use:");
-                for cmd in post {
-                    println!("    - {cmd}");
-                }
-            }
-            if !fail.is_empty() {
-                println!("  post_tool_use_failure:");
-                for cmd in fail {
-                    println!("    - {cmd}");
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_branch_command() -> Result<(), Box<dyn std::error::Error>> {
-        let cwd = env::current_dir()?;
-        let output = std::process::Command::new("git")
-            .args(["branch", "-a", "--sort=-committerdate"])
-            .current_dir(&cwd)
-            .output()?;
-        if output.status.success() {
-            let branches = String::from_utf8_lossy(&output.stdout);
-            if branches.trim().is_empty() {
-                println!("No branches found.");
-            } else {
-                println!("{}", branches.trim_end());
-            }
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("git branch failed: {}", stderr.trim());
-        }
-        Ok(())
-    }
-
-    fn handle_add_dir(path: Option<&str>) {
-        match path {
-            Some(p) => {
-                println!("Directory noted: {p}");
-                println!("Additional directories are included in the next AI turn's context.");
-            }
-            None => {
-                println!("Usage: /add-dir <path>");
-                println!("Add an additional directory to the conversation context.");
-            }
-        }
-    }
-
-    fn handle_telemetry(action: Option<&str>) {
-        match action.map(str::trim) {
-            None | Some("status") | Some("") => {
-                let enabled = env::var("ACE_TELEMETRY").unwrap_or_default();
-                if enabled == "0" || enabled.eq_ignore_ascii_case("false") {
-                    println!("Telemetry: disabled (ACE_TELEMETRY={enabled})");
-                } else {
-                    println!("Telemetry: enabled (default)");
-                    println!("Set ACE_TELEMETRY=0 to disable.");
-                }
-            }
-            Some("on") => println!("Telemetry enabled."),
-            Some("off") => println!("Telemetry disabled for this session."),
-            Some(other) => {
-                eprintln!("Unknown telemetry action: {other}");
-                eprintln!("Usage: /telemetry [on|off|status]");
-            }
-        }
-    }
-
-    fn handle_providers() {
-        let anthropic_key = env::var("ANTHROPIC_API_KEY").ok().filter(|v| !v.is_empty());
-        let gemini_key = env::var("GEMINI_API_KEY").ok().filter(|v| !v.is_empty());
-        println!("Available providers:");
-        println!(
-            "  - anthropic  (ANTHROPIC_API_KEY: {})",
-            if anthropic_key.is_some() {
-                "set"
-            } else {
-                "not set"
-            }
-        );
-        println!(
-            "  - gemini     (GEMINI_API_KEY: {}) [coming soon]",
-            if gemini_key.is_some() {
-                "set"
-            } else {
-                "not set"
-            }
-        );
-        println!("  - ollama     (localhost:11434) [coming soon]");
-    }
-
-    fn handle_files_command() -> Result<(), Box<dyn std::error::Error>> {
-        let cwd = env::current_dir()?;
-        let output = std::process::Command::new("git")
-            .args(["ls-files"])
-            .current_dir(&cwd)
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let files = String::from_utf8_lossy(&o.stdout);
-                if files.trim().is_empty() {
-                    println!("No tracked files.");
-                } else {
-                    let lines: Vec<&str> = files.lines().collect();
-                    println!("Tracked files ({} total):", lines.len());
-                    for line in lines.iter().take(50) {
-                        println!("  {line}");
-                    }
-                    if lines.len() > 50 {
-                        println!("  ... and {} more", lines.len() - 50);
-                    }
-                }
-            }
-            _ => {
-                // Fallback: list current directory
-                let entries = fs::read_dir(&cwd)?;
-                println!("Files in {}:", cwd.display());
-                for entry in entries.flatten() {
-                    println!("  {}", entry.file_name().to_string_lossy());
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_context_command(&self, _action: Option<&str>) {
-        let cwd = env::current_dir().unwrap_or_default();
-        let estimated_tokens = self.runtime.estimated_tokens();
-        println!("Session context:");
-        println!("  Model:            {}", self.model);
-        println!("  Session ID:       {}", self.session.id);
-        println!("  Session file:     {}", self.session.path.display());
-        println!("  Working dir:      {}", cwd.display());
-        println!("  Permission mode:  {}", self.permission_mode.as_str());
-        println!(
-            "  Messages:         {}",
-            self.runtime.session().messages.len()
-        );
-        println!("  Turns:            {}", self.runtime.usage().turns());
-        println!("  Est. tokens:      {estimated_tokens}");
     }
 }
 

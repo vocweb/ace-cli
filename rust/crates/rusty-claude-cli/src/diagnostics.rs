@@ -228,7 +228,7 @@ pub(crate) fn run_doctor(output_format: CliOutputFormat) -> Result<(), Box<dyn s
     Ok(())
 }
 
-/// Read `.claw/worker-state.json` from the current working directory and print it.
+/// Read `.ace/worker-state.json` from the current working directory and print it.
 /// This is the file-based worker observability surface: `push_event()` in `worker_boot.rs`
 /// atomically writes state transitions here so external observers (clawhip, orchestrators)
 /// can poll current `WorkerStatus` without needing an HTTP route on the opencode binary.
@@ -236,7 +236,7 @@ pub(crate) fn run_worker_state(
     output_format: CliOutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cwd = env::current_dir()?;
-    let state_path = cwd.join(".claw").join("worker-state.json");
+    let state_path = cwd.join(".ace").join("worker-state.json");
     if !state_path.exists() {
         // Emit a structured error, then return Err so the process exits 1.
         // Callers (scripts, CI) need a non-zero exit to detect "no state" without

@@ -25,7 +25,7 @@ fn status_command_applies_model_and_permission_mode_flags() {
             "status",
         ])
         .output()
-        .expect("claw should launch");
+        .expect("ace should launch");
 
     // then
     assert_success(&output);
@@ -53,7 +53,7 @@ fn resume_flag_loads_a_saved_session_and_dispatches_status() {
             "/status",
         ])
         .output()
-        .expect("claw should launch");
+        .expect("ace should launch");
 
     // then
     assert_success(&output);
@@ -77,12 +77,12 @@ fn slash_command_names_match_known_commands_and_suggest_nearby_unknown_ones() {
         .current_dir(&temp_dir)
         .arg("/help")
         .output()
-        .expect("claw should launch");
+        .expect("ace should launch");
     let unknown_output = Command::new(env!("CARGO_BIN_EXE_ace"))
         .current_dir(&temp_dir)
         .arg("/zstats")
         .output()
-        .expect("claw should launch");
+        .expect("ace should launch");
 
     // then
     assert_success(&help_output);
@@ -113,7 +113,7 @@ fn omc_namespaced_slash_commands_surface_a_targeted_compatibility_hint() {
         .current_dir(&temp_dir)
         .arg("/oh-my-claudecode:hud")
         .output()
-        .expect("claw should launch");
+        .expect("ace should launch");
 
     assert!(
         !output.status.success(),
@@ -133,16 +133,15 @@ fn omc_namespaced_slash_commands_surface_a_targeted_compatibility_hint() {
 fn config_command_loads_defaults_from_standard_config_locations() {
     // given
     let temp_dir = unique_temp_dir("config-defaults");
-    let config_home = temp_dir.join("home").join(".claw");
-    fs::create_dir_all(temp_dir.join(".claw")).expect("project config dir should exist");
+    let config_home = temp_dir.join("home").join(".ace");
+    fs::create_dir_all(temp_dir.join(".ace")).expect("project config dir should exist");
     fs::create_dir_all(&config_home).expect("home config dir should exist");
 
     fs::write(config_home.join("settings.json"), r#"{"model":"haiku"}"#)
         .expect("write user settings");
-    fs::write(temp_dir.join(".claw.json"), r#"{"model":"sonnet"}"#)
-        .expect("write project settings");
+    fs::write(temp_dir.join(".ace.json"), r#"{"model":"sonnet"}"#).expect("write project settings");
     fs::write(
-        temp_dir.join(".claw").join("settings.local.json"),
+        temp_dir.join(".ace").join("settings.local.json"),
         r#"{"model":"opus"}"#,
     )
     .expect("write local settings");
@@ -150,7 +149,7 @@ fn config_command_loads_defaults_from_standard_config_locations() {
 
     // when
     let output = command_in(&temp_dir)
-        .env("CLAW_CONFIG_HOME", &config_home)
+        .env("ACE_CONFIG_HOME", &config_home)
         .args([
             "--resume",
             session_path.to_str().expect("utf8 path"),
@@ -158,7 +157,7 @@ fn config_command_loads_defaults_from_standard_config_locations() {
             "model",
         ])
         .output()
-        .expect("claw should launch");
+        .expect("ace should launch");
 
     // then
     assert_success(&output);
@@ -173,10 +172,10 @@ fn config_command_loads_defaults_from_standard_config_locations() {
             .to_str()
             .expect("utf8 path")
     ));
-    assert!(stdout.contains(temp_dir.join(".claw.json").to_str().expect("utf8 path")));
+    assert!(stdout.contains(temp_dir.join(".ace.json").to_str().expect("utf8 path")));
     assert!(stdout.contains(
         temp_dir
-            .join(".claw")
+            .join(".ace")
             .join("settings.local.json")
             .to_str()
             .expect("utf8 path")
@@ -189,18 +188,18 @@ fn config_command_loads_defaults_from_standard_config_locations() {
 fn doctor_command_runs_as_a_local_shell_entrypoint() {
     // given
     let temp_dir = unique_temp_dir("doctor-entrypoint");
-    let config_home = temp_dir.join("home").join(".claw");
+    let config_home = temp_dir.join("home").join(".ace");
     fs::create_dir_all(&config_home).expect("config home should exist");
 
     // when
     let output = command_in(&temp_dir)
-        .env("CLAW_CONFIG_HOME", &config_home)
+        .env("ACE_CONFIG_HOME", &config_home)
         .env_remove("ANTHROPIC_API_KEY")
         .env_remove("ANTHROPIC_AUTH_TOKEN")
         .env("ANTHROPIC_BASE_URL", "http://127.0.0.1:9")
         .arg("doctor")
         .output()
-        .expect("claw doctor should launch");
+        .expect("ace doctor should launch");
 
     // then
     assert_success(&output);
@@ -218,11 +217,11 @@ fn doctor_command_runs_as_a_local_shell_entrypoint() {
 #[test]
 fn local_subcommand_help_does_not_fall_through_to_runtime_or_provider_calls() {
     let temp_dir = unique_temp_dir("subcommand-help");
-    let config_home = temp_dir.join("home").join(".claw");
+    let config_home = temp_dir.join("home").join(".ace");
     fs::create_dir_all(&config_home).expect("config home should exist");
 
     let doctor_help = command_in(&temp_dir)
-        .env("CLAW_CONFIG_HOME", &config_home)
+        .env("ACE_CONFIG_HOME", &config_home)
         .env_remove("ANTHROPIC_API_KEY")
         .env_remove("ANTHROPIC_AUTH_TOKEN")
         .env("ANTHROPIC_BASE_URL", "http://127.0.0.1:9")
@@ -230,7 +229,7 @@ fn local_subcommand_help_does_not_fall_through_to_runtime_or_provider_calls() {
         .output()
         .expect("doctor help should launch");
     let status_help = command_in(&temp_dir)
-        .env("CLAW_CONFIG_HOME", &config_home)
+        .env("ACE_CONFIG_HOME", &config_home)
         .env_remove("ANTHROPIC_API_KEY")
         .env_remove("ANTHROPIC_AUTH_TOKEN")
         .env("ANTHROPIC_BASE_URL", "http://127.0.0.1:9")
@@ -292,7 +291,7 @@ fn unique_temp_dir(label: &str) -> PathBuf {
         .as_millis();
     let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
-        "claw-{label}-{}-{millis}-{counter}",
+        "ace-{label}-{}-{millis}-{counter}",
         std::process::id()
     ))
 }

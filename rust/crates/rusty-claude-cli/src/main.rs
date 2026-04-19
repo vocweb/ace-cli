@@ -761,60 +761,16 @@ fn run_resume_command(
                 })),
             })
         }
-        SlashCommand::Bughunter { .. }
-        | SlashCommand::Commit { .. }
-        | SlashCommand::Pr { .. }
-        | SlashCommand::Issue { .. }
-        | SlashCommand::Ultraplan { .. }
-        | SlashCommand::Teleport { .. }
+        SlashCommand::Teleport { .. }
         | SlashCommand::DebugToolCall { .. }
         | SlashCommand::Resume { .. }
         | SlashCommand::Model { .. }
         | SlashCommand::Permissions { .. }
         | SlashCommand::Session { .. }
         | SlashCommand::Plugins { .. }
-        | SlashCommand::Login
-        | SlashCommand::Logout
-        | SlashCommand::Vim
-        | SlashCommand::Upgrade
-        | SlashCommand::Share
-        | SlashCommand::Feedback
-        | SlashCommand::Files
-        | SlashCommand::Fast
-        | SlashCommand::Exit
-        | SlashCommand::Summary
-        | SlashCommand::Desktop
-        | SlashCommand::Brief
-        | SlashCommand::Advisor
-        | SlashCommand::Stickers
         | SlashCommand::Insights
-        | SlashCommand::Thinkback
-        | SlashCommand::ReleaseNotes
         | SlashCommand::SecurityReview
-        | SlashCommand::Keybindings
-        | SlashCommand::PrivacySettings
-        | SlashCommand::Plan { .. }
         | SlashCommand::Review { .. }
-        | SlashCommand::Tasks { .. }
-        | SlashCommand::Theme { .. }
-        | SlashCommand::Voice { .. }
-        | SlashCommand::Usage { .. }
-        | SlashCommand::Rename { .. }
-        | SlashCommand::Copy { .. }
-        | SlashCommand::Hooks { .. }
-        | SlashCommand::Context { .. }
-        | SlashCommand::Color { .. }
-        | SlashCommand::Effort { .. }
-        | SlashCommand::Branch { .. }
-        | SlashCommand::Rewind { .. }
-        | SlashCommand::Ide { .. }
-        | SlashCommand::Tag { .. }
-        | SlashCommand::OutputStyle { .. }
-        | SlashCommand::AddDir { .. }
-        | SlashCommand::Team { .. }
-        | SlashCommand::Cron { .. }
-        | SlashCommand::Telemetry { .. }
-        | SlashCommand::Providers
         | SlashCommand::Thinking => Err("unsupported resumed slash command".into()),
     }
 }
@@ -824,17 +780,15 @@ mod tests {
     use super::{
         build_runtime_plugin_state_with_loader, build_runtime_with_plugin_state,
         collect_session_prompt_history, create_managed_session_handle, describe_tool_progress,
-        filter_tool_specs, format_bughunter_report, format_commit_preflight_report,
-        format_commit_skipped_report, format_compact_report, format_connected_line,
-        format_cost_report, format_history_timestamp, format_internal_prompt_progress_line,
-        format_issue_report, format_model_report, format_model_switch_report,
-        format_permissions_report, format_permissions_switch_report, format_pr_report,
+        filter_tool_specs, format_compact_report, format_connected_line, format_cost_report,
+        format_history_timestamp, format_internal_prompt_progress_line, format_model_report,
+        format_model_switch_report, format_permissions_report, format_permissions_switch_report,
         format_resume_report, format_status_report, format_tool_call_start, format_tool_result,
-        format_ultraplan_report, format_unknown_slash_command, format_user_visible_api_error,
-        merge_prompt_with_stdin, normalize_permission_mode, parse_args, parse_export_args,
-        parse_git_status_branch, parse_git_status_metadata_for, parse_git_workspace_summary,
-        parse_history_count, permission_policy, print_help_to, push_output_block,
-        render_config_report, render_diff_report, render_diff_report_for, render_memory_report,
+        format_unknown_slash_command, format_user_visible_api_error, merge_prompt_with_stdin,
+        normalize_permission_mode, parse_args, parse_export_args, parse_git_status_branch,
+        parse_git_status_metadata_for, parse_git_workspace_summary, parse_history_count,
+        permission_policy, print_help_to, push_output_block, render_config_report,
+        render_diff_report, render_diff_report_for, render_memory_report,
         render_prompt_history_report, render_repl_help, render_resume_usage,
         render_session_markdown, resolve_model_alias, resolve_model_alias_with_config,
         resolve_repl_model, resolve_session_reference, response_to_events,
@@ -996,24 +950,24 @@ mod tests {
         let root = temp_dir();
         let cwd = root.join("project");
         let config_home = root.join("config-home");
-        std::fs::create_dir_all(cwd.join(".claw")).expect("project config dir should exist");
+        std::fs::create_dir_all(cwd.join(".ace")).expect("project config dir should exist");
         std::fs::create_dir_all(&config_home).expect("config home should exist");
         std::fs::write(
-            cwd.join(".claw").join("settings.json"),
+            cwd.join(".ace").join("settings.json"),
             r#"{"permissionMode":"acceptEdits"}"#,
         )
         .expect("project config should write");
 
-        let original_config_home = std::env::var("CLAW_CONFIG_HOME").ok();
+        let original_config_home = std::env::var("ACE_CONFIG_HOME").ok();
         let original_permission_mode = std::env::var("RUSTY_CLAUDE_PERMISSION_MODE").ok();
-        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
+        std::env::set_var("ACE_CONFIG_HOME", &config_home);
         std::env::remove_var("RUSTY_CLAUDE_PERMISSION_MODE");
 
         let resolved = with_current_dir(&cwd, super::default_permission_mode);
 
         match original_config_home {
-            Some(value) => std::env::set_var("CLAW_CONFIG_HOME", value),
-            None => std::env::remove_var("CLAW_CONFIG_HOME"),
+            Some(value) => std::env::set_var("ACE_CONFIG_HOME", value),
+            None => std::env::remove_var("ACE_CONFIG_HOME"),
         }
         match original_permission_mode {
             Some(value) => std::env::set_var("RUSTY_CLAUDE_PERMISSION_MODE", value),
@@ -1030,24 +984,24 @@ mod tests {
         let root = temp_dir();
         let cwd = root.join("project");
         let config_home = root.join("config-home");
-        std::fs::create_dir_all(cwd.join(".claw")).expect("project config dir should exist");
+        std::fs::create_dir_all(cwd.join(".ace")).expect("project config dir should exist");
         std::fs::create_dir_all(&config_home).expect("config home should exist");
         std::fs::write(
-            cwd.join(".claw").join("settings.json"),
+            cwd.join(".ace").join("settings.json"),
             r#"{"permissionMode":"acceptEdits"}"#,
         )
         .expect("project config should write");
 
-        let original_config_home = std::env::var("CLAW_CONFIG_HOME").ok();
+        let original_config_home = std::env::var("ACE_CONFIG_HOME").ok();
         let original_permission_mode = std::env::var("RUSTY_CLAUDE_PERMISSION_MODE").ok();
-        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
+        std::env::set_var("ACE_CONFIG_HOME", &config_home);
         std::env::set_var("RUSTY_CLAUDE_PERMISSION_MODE", "read-only");
 
         let resolved = with_current_dir(&cwd, super::default_permission_mode);
 
         match original_config_home {
-            Some(value) => std::env::set_var("CLAW_CONFIG_HOME", value),
-            None => std::env::remove_var("CLAW_CONFIG_HOME"),
+            Some(value) => std::env::set_var("ACE_CONFIG_HOME", value),
+            None => std::env::remove_var("ACE_CONFIG_HOME"),
         }
         match original_permission_mode {
             Some(value) => std::env::set_var("RUSTY_CLAUDE_PERMISSION_MODE", value),
@@ -1263,16 +1217,16 @@ mod tests {
         let root = temp_dir();
         let cwd = root.join("project");
         let config_home = root.join("config-home");
-        std::fs::create_dir_all(cwd.join(".claw")).expect("project config dir should exist");
+        std::fs::create_dir_all(cwd.join(".ace")).expect("project config dir should exist");
         std::fs::create_dir_all(&config_home).expect("config home should exist");
         std::fs::write(
-            cwd.join(".claw").join("settings.json"),
+            cwd.join(".ace").join("settings.json"),
             r#"{"aliases":{"fast":"claude-haiku-4-5-20251213","smart":"opus","cheap":"grok-3-mini"}}"#,
         )
         .expect("project config should write");
 
-        let original_config_home = std::env::var("CLAW_CONFIG_HOME").ok();
-        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
+        let original_config_home = std::env::var("ACE_CONFIG_HOME").ok();
+        std::env::set_var("ACE_CONFIG_HOME", &config_home);
 
         // when
         let direct = with_current_dir(&cwd, || resolve_model_alias_with_config("fast"));
@@ -1282,8 +1236,8 @@ mod tests {
         let builtin = with_current_dir(&cwd, || resolve_model_alias_with_config("haiku"));
 
         match original_config_home {
-            Some(value) => std::env::set_var("CLAW_CONFIG_HOME", value),
-            None => std::env::remove_var("CLAW_CONFIG_HOME"),
+            Some(value) => std::env::set_var("ACE_CONFIG_HOME", value),
+            None => std::env::remove_var("ACE_CONFIG_HOME"),
         }
         std::fs::remove_dir_all(root).expect("temp config root should clean up");
 
@@ -2234,7 +2188,7 @@ mod tests {
         fs::create_dir_all(&root).expect("root dir");
         let config_home = root.join("config");
         fs::create_dir_all(&config_home).expect("config home dir");
-        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
+        std::env::set_var("ACE_CONFIG_HOME", &config_home);
         std::env::remove_var("ANTHROPIC_MODEL");
         std::env::set_var("ANTHROPIC_MODEL", "sonnet");
 
@@ -2243,7 +2197,7 @@ mod tests {
         assert_eq!(resolved, "claude-sonnet-4-6");
 
         std::env::remove_var("ANTHROPIC_MODEL");
-        std::env::remove_var("CLAW_CONFIG_HOME");
+        std::env::remove_var("ACE_CONFIG_HOME");
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 
@@ -2254,14 +2208,14 @@ mod tests {
         fs::create_dir_all(&root).expect("root dir");
         let config_home = root.join("config");
         fs::create_dir_all(&config_home).expect("config home dir");
-        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
+        std::env::set_var("ACE_CONFIG_HOME", &config_home);
         std::env::remove_var("ANTHROPIC_MODEL");
 
         let resolved = with_current_dir(&root, || resolve_repl_model(DEFAULT_MODEL.to_string()));
 
         assert_eq!(resolved, DEFAULT_MODEL);
 
-        std::env::remove_var("CLAW_CONFIG_HOME");
+        std::env::remove_var("ACE_CONFIG_HOME");
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 
@@ -2271,10 +2225,10 @@ mod tests {
             .into_iter()
             .map(|spec| spec.name)
             .collect::<Vec<_>>();
-        // Now with 135+ slash commands, verify minimum resume support
+        // Verify minimum resume support among implemented commands
         assert!(
-            names.len() >= 39,
-            "expected at least 39 resume-supported commands, got {}",
+            names.len() >= 18,
+            "expected at least 18 resume-supported commands, got {}",
             names.len()
         );
         // Verify key resume commands still exist
@@ -2436,60 +2390,13 @@ mod tests {
     }
 
     #[test]
-    fn commit_reports_surface_workspace_context() {
-        let summary = GitWorkspaceSummary {
-            changed_files: 2,
-            staged_files: 1,
-            unstaged_files: 1,
-            untracked_files: 0,
-            conflicted_files: 0,
-        };
-
-        let preflight = format_commit_preflight_report(Some("feature/ux"), summary);
-        assert!(preflight.contains("Result           ready"));
-        assert!(preflight.contains("Branch           feature/ux"));
-        assert!(preflight.contains("Workspace        dirty · 2 files · 1 staged, 1 unstaged"));
-        assert!(preflight
-            .contains("Action           create a git commit from the current workspace changes"));
-    }
-
-    #[test]
-    fn commit_skipped_report_points_to_next_steps() {
-        let report = format_commit_skipped_report();
-        assert!(report.contains("Reason           no workspace changes"));
-        assert!(report
-            .contains("Action           create a git commit from the current workspace changes"));
-        assert!(report.contains("/status to inspect context"));
-        assert!(report.contains("/diff to inspect repo changes"));
-    }
-
-    #[test]
-    fn runtime_slash_reports_describe_command_behavior() {
-        let bughunter = format_bughunter_report(Some("runtime"));
-        assert!(bughunter.contains("Scope            runtime"));
-        assert!(bughunter.contains("inspect the selected code for likely bugs"));
-
-        let ultraplan = format_ultraplan_report(Some("ship the release"));
-        assert!(ultraplan.contains("Task             ship the release"));
-        assert!(ultraplan.contains("break work into a multi-step execution plan"));
-
-        let pr = format_pr_report("feature/ux", Some("ready for review"));
-        assert!(pr.contains("Branch           feature/ux"));
-        assert!(pr.contains("draft or create a pull request"));
-
-        let issue = format_issue_report(Some("flaky test"));
-        assert!(issue.contains("Context          flaky test"));
-        assert!(issue.contains("draft or create a GitHub issue"));
-    }
-
-    #[test]
     fn no_arg_commands_reject_unexpected_arguments() {
-        assert!(validate_no_args("/commit", None).is_ok());
+        assert!(validate_no_args("/compact", None).is_ok());
 
-        let error = validate_no_args("/commit", Some("now"))
+        let error = validate_no_args("/compact", Some("now"))
             .expect_err("unexpected arguments should fail")
             .to_string();
-        assert!(error.contains("/commit does not accept arguments"));
+        assert!(error.contains("/compact does not accept arguments"));
         assert!(error.contains("Received: now"));
     }
 

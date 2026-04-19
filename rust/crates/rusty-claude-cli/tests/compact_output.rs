@@ -28,7 +28,7 @@ fn compact_flag_prints_only_final_assistant_text_without_tool_call_details() {
 
     // when we run claw in compact text mode against a tool-using scenario
     let prompt = format!("{SCENARIO_PREFIX}read_file_roundtrip");
-    let output = run_claw(
+    let output = run_ace(
         &workspace,
         &config_home,
         &home,
@@ -94,7 +94,7 @@ fn compact_flag_streaming_text_only_emits_final_message_text() {
 
     // when we invoke claw with --compact for the streaming text scenario
     let prompt = format!("{SCENARIO_PREFIX}streaming_text");
-    let output = run_claw(
+    let output = run_ace(
         &workspace,
         &config_home,
         &home,
@@ -125,7 +125,7 @@ fn compact_flag_streaming_text_only_emits_final_message_text() {
     fs::remove_dir_all(&workspace).expect("workspace cleanup should succeed");
 }
 
-fn run_claw(
+fn run_ace(
     cwd: &std::path::Path,
     config_home: &std::path::Path,
     home: &std::path::Path,
@@ -138,12 +138,12 @@ fn run_claw(
         .env_clear()
         .env("ANTHROPIC_API_KEY", "test-compact-key")
         .env("ANTHROPIC_BASE_URL", base_url)
-        .env("CLAW_CONFIG_HOME", config_home)
+        .env("ACE_CONFIG_HOME", config_home)
         .env("HOME", home)
         .env("NO_COLOR", "1")
         .env("PATH", "/usr/bin:/bin")
         .args(args);
-    command.output().expect("claw should launch")
+    command.output().expect("ace should launch")
 }
 
 fn unique_temp_dir(label: &str) -> PathBuf {
@@ -153,7 +153,7 @@ fn unique_temp_dir(label: &str) -> PathBuf {
         .as_millis();
     let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
-        "claw-compact-{label}-{}-{millis}-{counter}",
+        "ace-compact-{label}-{}-{millis}-{counter}",
         std::process::id()
     ))
 }
